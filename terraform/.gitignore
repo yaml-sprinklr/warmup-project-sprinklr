@@ -1,0 +1,32 @@
+# terraform/.gitignore
+
+# Terraform state files contain sensitive data
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Variable files may contain secrets
+terraform.tfvars
+*.auto.tfvars
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# Provider binaries and cache
+.terraform/
+.terraform.lock.hcl
+
+# Ignore any backup files
+*.bak
+

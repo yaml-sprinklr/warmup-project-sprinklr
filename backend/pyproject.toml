@@ -1,0 +1,10 @@
+[project]
+name = "app"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.1",
+    "fastapi[standard]>=0.128.0",
+    "psycopg[binary]>=3.3.2",
+    "sqlmodel>=0.0.31",
+]
