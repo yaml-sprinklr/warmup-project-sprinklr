@@ -1,1 +1,87 @@
+# Default values for rest-api.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
 
+replicaCount: 1
+
+image:
+  repository: order-service 
+  pullPolicy: Never
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "v4"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# env:
+  # POSTGRES_SERVER: "my-pg-release-postgresql"
+  # POSTGRES_PORT: "5432"
+  # POSTGRES_DB: "postgres"
+  # POSTGRES_USER: "postgres"
+  # POSTGRES_PASSWORD: "RpHaLo4txB"
+
+livenessProbe:
+  httpGet:
+    path: /api/v1/health/live
+    port: http
+  initialDelaySeconds: 30   # Wait 30s before first check (app startup time)
+  periodSeconds: 10         # Check every 10s
+  timeoutSeconds: 5         # 5s timeout per check
+  failureThreshold: 3       # Restart after 3 consecutive failures
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health/ready
+    port: http
+  initialDelaySeconds: 10   # Check sooner (readiness is less disruptive)
+  periodSeconds: 5          # Check every 5s
+  timeoutSeconds: 3         # 3s timeout
+  failureThreshold: 3       # Remove from service after 3 failures
+  successThreshold: 1       # Add back to service after 1 success
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+volumes: []
+volumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []

@@ -39,7 +39,7 @@ resource "random_password" "postgres_password" {
 
 resource "helm_release" "postgresql" {
   name       = "my-pg-release"
-  repository = "https://charts.bitnami.com/bitnami"
+  repository = "oci://registry-1.docker.io/bitnamicharts"
   chart      = "postgresql"
   version    = "18.2.3"
   wait       = true
@@ -98,22 +98,13 @@ resource "kubernetes_secret" "db_credentials" {
       app        = "order-service"
       managed-by = "terraform"
     }
-
   }
 
+  # Only store sensitive data in the secret
   data = {
-    POSTGRES_SERVER = "${helm_release.postgresql.name}-postgresql.${kubernetes_namespace.order_service.metadata[0].name}.svc.cluster.local"
-
-    POSTGRES_PORT = "5432"
-
-    POSTGRES_DB = "appdb"
-
-    POSTGRES_USER = "postgres"
-
     POSTGRES_PASSWORD = random_password.postgres_password.result
-
-    DATABASE_URL = "postgresql://postgres:${random_password.postgres_password.result}@${helm_release.postgresql.name}-postgresql.${kubernetes_namespace.order_service.metadata[0].name}.svc.cluster.local:5432/appdb"
   }
+  
   type       = "Opaque"
   depends_on = [helm_release.postgresql]
 }
@@ -164,7 +155,7 @@ resource "helm_release" "order_service" {
 
   set {
     name  = "image.tag"
-    value = "v4"
+    value = "v6"
   }
 
   set {
