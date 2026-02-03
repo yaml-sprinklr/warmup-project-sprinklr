@@ -104,7 +104,7 @@ resource "kubernetes_secret" "db_credentials" {
   data = {
     POSTGRES_PASSWORD = random_password.postgres_password.result
   }
-  
+
   type       = "Opaque"
   depends_on = [helm_release.postgresql]
 }
@@ -132,6 +132,105 @@ resource "kubernetes_config_map" "app_config" {
     helm_release.postgresql
   ]
 }
+
+# DATABASE MIGRATIONS JOB
+
+resource "kubernetes_job_v1" "db_migrations" {
+  metadata {
+    name      = "db-migrations"
+    namespace = kubernetes_namespace.order_service.metadata[0].name
+
+    labels = {
+      app        = "order-service"
+      component  = "migrations"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {
+    backoff_limit = 3
+
+    ttl_seconds_after_finished = 300
+
+    template {
+      metadata {
+        labels = {
+          app       = "order-service"
+          component = "migrations"
+        }
+      }
+
+      spec {
+        # Jobs must have restartPolicy: OnFailure or Never
+        # OnFailure = retry in same pod
+        # Never = create new pod for each retry
+        restart_policy = "OnFailure"
+
+        container {
+          name  = "alembic-migrations"
+          image = "order-service:v6" # Same image as your app
+
+          command = [
+            "/bin/sh",
+            "-c",
+            "cd /app/backend && uv run alembic upgrade head"
+          ]
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.app_config.metadata[0].name
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.db_credentials.metadata[0].name
+            }
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "250m"
+              memory = "256Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.postgresql,
+    kubernetes_config_map.app_config,
+    kubernetes_secret.db_credentials
+  ]
+
+  # This ensures the job is deleted and recreated if config changes
+  # Without this, Terraform can't update jobs (they're immutable)
+  lifecycle {
+    replace_triggered_by = [
+      kubernetes_config_map.app_config,
+      kubernetes_secret.db_credentials
+    ]
+  }
+
+  # Don't wait for completion during terraform apply
+  # This allows terraform to proceed while job runs
+  wait_for_completion = false
+
+  # However, we can optionally wait with a timeout
+  # Uncomment to wait up to 5 minutes for migrations to complete:
+  # wait_for_completion = true
+  # timeouts {
+  #   create = "5m"
+  #   update = "5m"
+  # }
+}
+
 # FastAPI application for order-service
 
 resource "helm_release" "order_service" {
@@ -180,13 +279,32 @@ resource "helm_release" "order_service" {
     name  = "envFromSecret"
     value = kubernetes_secret.db_credentials.metadata[0].name
   }
+
+  # ===== DEPENDENCIES =====
+  # Ensure migrations complete before app starts
   depends_on = [
     helm_release.postgresql,          # Database must be running
     kubernetes_config_map.app_config, # Config must exist
-    kubernetes_secret.db_credentials  # Credentials must exist
+    kubernetes_secret.db_credentials, # Credentials must exist
+    kubernetes_job_v1.db_migrations   # Migrations must complete first! ← NEW!
   ]
 }
 # FastAPI application Outputs
+
+output "migration_job_name" {
+  description = "The name of the database migration job"
+  value       = kubernetes_job_v1.db_migrations.metadata[0].name
+}
+
+output "migration_status" {
+  description = "Check migration job status with this command"
+  value       = "kubectl get job ${kubernetes_job_v1.db_migrations.metadata[0].name} -n ${kubernetes_namespace.order_service.metadata[0].name}"
+}
+
+output "migration_logs" {
+  description = "View migration logs with this command"
+  value       = "kubectl logs -n ${kubernetes_namespace.order_service.metadata[0].name} -l component=migrations"
+}
 
 output "order_service_release_name" {
   description = "The Helm release name for order service"
