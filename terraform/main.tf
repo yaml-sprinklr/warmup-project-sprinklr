@@ -1,51 +1,63 @@
-# Namespace
+# ============================================================================
+# NAMESPACE
+# ============================================================================
 
 resource "kubernetes_namespace" "order_service" {
   metadata {
-    name = "order-service"
-
-    labels = {
-      managed-by  = "terraform"
-      app         = "order-service"
-      environment = "dev"
-    }
+    name = var.namespace
+    
+    # Merge common labels with resource-specific labels
+    labels = merge(
+      var.common_labels,
+      {
+        app         = var.app_name
+        environment = var.environment
+      }
+    )
+    
     annotations = {
-      description = "Namespace for order service and its dependencies"
+      description = "Namespace for ${var.app_name} and its dependencies"
+      environment = var.environment
     }
   }
 }
 
 
-# Database Password Generation
+# ============================================================================
+# DATABASE PASSWORD GENERATION
+# ============================================================================
 
 resource "random_password" "postgres_password" {
-  length           = 16
+  length           = var.postgres_password_length
   special          = true
   upper            = true
   lower            = true
   numeric          = true
   override_special = "!#$%&*()-_=+[]{}:?"
-
+  
   lifecycle {
     ignore_changes = [
-      # Don't regenerate if these change
       override_special,
     ]
   }
 }
 
 
-# Postgres Database
+# ============================================================================
+# POSTGRESQL DATABASE
+# ============================================================================
 
 resource "helm_release" "postgresql" {
-  name       = "my-pg-release"
+  name       = "${var.app_name}-postgres"
   repository = "oci://registry-1.docker.io/bitnamicharts"
   chart      = "postgresql"
-  version    = "18.2.3"
-  wait       = true
-  timeout    = 300
-  namespace  = kubernetes_namespace.order_service.metadata[0].name
-
+  version    = var.postgres_chart_version
+  
+  namespace = kubernetes_namespace.order_service.metadata[0].name
+  
+  wait    = true
+  timeout = var.helm_timeout
+  
   create_namespace = false
 
   # ===== HELM VALUES =====
@@ -63,41 +75,60 @@ resource "helm_release" "postgresql" {
   # Database name
   set {
     name  = "auth.database"
-    value = "appdb"
+    value = var.postgres_database_name
   }
+  
+  # Storage configuration
   set {
     name  = "primary.persistence.size"
-    value = "1Gi"
+    value = var.postgres_storage_size
   }
+  
+  # Resource requests
   set {
     name  = "primary.resources.requests.cpu"
-    value = "250m"
+    value = var.postgres_resources.requests.cpu
   }
+  
   set {
-    name  = "primary.resources.limits.memory"
-    value = "512Mi"
+    name  = "primary.resources.requests.memory"
+    value = var.postgres_resources.requests.memory
   }
+  
+  # Resource limits
   set {
     name  = "primary.resources.limits.cpu"
-    value = "500m"
+    value = var.postgres_resources.limits.cpu
   }
+  
+  set {
+    name  = "primary.resources.limits.memory"
+    value = var.postgres_resources.limits.memory
+  }
+  
+  # Metrics (monitoring)
   set {
     name  = "metrics.enabled"
-    value = "false"
+    value = var.enable_metrics
   }
 }
 
-# Database Connection Secret
+# ============================================================================
+# DATABASE CONNECTION SECRET
+# ============================================================================
 
 resource "kubernetes_secret" "db_credentials" {
   metadata {
-    name      = "db-credentials"
+    name      = "${var.app_name}-db-credentials"
     namespace = kubernetes_namespace.order_service.metadata[0].name
-
-    labels = {
-      app        = "order-service"
-      managed-by = "terraform"
-    }
+    
+    labels = merge(
+      var.common_labels,
+      {
+        app       = var.app_name
+        component = "database"
+      }
+    )
   }
 
   # Only store sensitive data in the secret
@@ -109,22 +140,28 @@ resource "kubernetes_secret" "db_credentials" {
   depends_on = [helm_release.postgresql]
 }
 
+# ============================================================================
 # APPLICATION CONFIGURATION (Non-sensitive)
+# ============================================================================
 
 resource "kubernetes_config_map" "app_config" {
   metadata {
-    name      = "order-service-config"
+    name      = "${var.app_name}-config"
     namespace = kubernetes_namespace.order_service.metadata[0].name
-    labels = {
-      app        = "order-service"
-      managed-by = "terraform"
-    }
+    
+    labels = merge(
+      var.common_labels,
+      {
+        app       = var.app_name
+        component = "configuration"
+      }
+    )
   }
-
+  
   data = {
     POSTGRES_SERVER = "${helm_release.postgresql.name}-postgresql"
     POSTGRES_PORT   = "5432"
-    POSTGRES_DB     = "appdb"
+    POSTGRES_DB     = var.postgres_database_name
     POSTGRES_USER   = "postgres"
   }
 
@@ -133,42 +170,43 @@ resource "kubernetes_config_map" "app_config" {
   ]
 }
 
+# ============================================================================
 # DATABASE MIGRATIONS JOB
+# ============================================================================
 
 resource "kubernetes_job_v1" "db_migrations" {
   metadata {
-    name      = "db-migrations"
+    name      = "${var.app_name}-migrations"
     namespace = kubernetes_namespace.order_service.metadata[0].name
-
-    labels = {
-      app        = "order-service"
-      component  = "migrations"
-      managed-by = "terraform"
-    }
+    
+    labels = merge(
+      var.common_labels,
+      {
+        app       = var.app_name
+        component = "migrations"
+      }
+    )
   }
-
+  
   spec {
-    backoff_limit = 3
+    backoff_limit = var.migration_backoff_limit
 
     ttl_seconds_after_finished = 300
 
     template {
       metadata {
         labels = {
-          app       = "order-service"
+          app       = var.app_name
           component = "migrations"
         }
       }
-
+      
       spec {
-        # Jobs must have restartPolicy: OnFailure or Never
-        # OnFailure = retry in same pod
-        # Never = create new pod for each retry
         restart_policy = "OnFailure"
-
+        
         container {
           name  = "alembic-migrations"
-          image = "order-service:v6" # Same image as your app
+          image = "${var.app_image_repository}:${var.app_image_tag}"
 
           command = [
             "/bin/sh",
@@ -190,12 +228,12 @@ resource "kubernetes_job_v1" "db_migrations" {
 
           resources {
             requests = {
-              cpu    = "100m"
-              memory = "128Mi"
+              cpu    = var.migration_resources.requests.cpu
+              memory = var.migration_resources.requests.memory
             }
             limits = {
-              cpu    = "250m"
-              memory = "256Mi"
+              cpu    = var.migration_resources.limits.cpu
+              memory = var.migration_resources.limits.memory
             }
           }
         }
@@ -218,54 +256,47 @@ resource "kubernetes_job_v1" "db_migrations" {
     ]
   }
 
-  # Don't wait for completion during terraform apply
-  # This allows terraform to proceed while job runs
-  wait_for_completion = false
-
-  # However, we can optionally wait with a timeout
-  # Uncomment to wait up to 5 minutes for migrations to complete:
-  # wait_for_completion = true
-  # timeouts {
-  #   create = "5m"
-  #   update = "5m"
-  # }
+  # Wait for completion setting from variables
+  # In prod, this should be true to ensure migrations complete before app starts
+  wait_for_completion = var.migration_wait_for_completion
 }
 
-# FastAPI application for order-service
+# ============================================================================
+# FASTAPI APPLICATION
+# ============================================================================
 
 resource "helm_release" "order_service" {
-  name             = "order-service"
-  chart            = "../helm/rest-api"
-  namespace        = kubernetes_namespace.order_service.metadata[0].name
-  wait             = true
-  timeout          = 300
+  name      = var.app_name
+  chart     = var.helm_chart_path
+  namespace = kubernetes_namespace.order_service.metadata[0].name
+  
+  wait    = true
+  timeout = var.helm_timeout
+  
   create_namespace = false
-
-  # Overriding values from values.yaml
+  
+  # ===== IMAGE CONFIGURATION =====
+  
   set {
     name  = "image.repository"
-    value = "order-service"
+    value = var.app_image_repository
   }
-
-  set {
-    name  = "image.repository"
-    value = "order-service"
-  }
-
+  
   set {
     name  = "image.tag"
-    value = "v6"
+    value = var.app_image_tag
   }
-
+  
   set {
     name  = "image.pullPolicy"
-    value = "Never" # Use local image, don't pull from registry
+    value = "Never"  # Always use local image for now
   }
-
-  # Replica count
+  
+  # ===== SCALING =====
+  
   set {
     name  = "replicaCount"
-    value = "2"
+    value = var.app_replica_count
   }
 
   # Reference the ConfigMap for non-sensitive config
@@ -283,96 +314,9 @@ resource "helm_release" "order_service" {
   # ===== DEPENDENCIES =====
   # Ensure migrations complete before app starts
   depends_on = [
-    helm_release.postgresql,          # Database must be running
-    kubernetes_config_map.app_config, # Config must exist
-    kubernetes_secret.db_credentials, # Credentials must exist
-    kubernetes_job_v1.db_migrations   # Migrations must complete first! ← NEW!
+    helm_release.postgresql,           # Database must be running
+    kubernetes_config_map.app_config,  # Config must exist
+    kubernetes_secret.db_credentials,  # Credentials must exist
+    kubernetes_job_v1.db_migrations    # Migrations must complete first!
   ]
-}
-# FastAPI application Outputs
-
-output "migration_job_name" {
-  description = "The name of the database migration job"
-  value       = kubernetes_job_v1.db_migrations.metadata[0].name
-}
-
-output "migration_status" {
-  description = "Check migration job status with this command"
-  value       = "kubectl get job ${kubernetes_job_v1.db_migrations.metadata[0].name} -n ${kubernetes_namespace.order_service.metadata[0].name}"
-}
-
-output "migration_logs" {
-  description = "View migration logs with this command"
-  value       = "kubectl logs -n ${kubernetes_namespace.order_service.metadata[0].name} -l component=migrations"
-}
-
-output "order_service_release_name" {
-  description = "The Helm release name for order service"
-  value       = helm_release.order_service.name
-}
-
-output "order_service_namespace" {
-  description = "The namespace where order service is deployed"
-  value       = helm_release.order_service.namespace
-}
-
-output "order_service_status" {
-  description = "The status of the order service Helm release"
-  value       = helm_release.order_service.status
-}
-
-output "order_service_access" {
-  description = "How to access your order service locally"
-  value = {
-    namespace    = helm_release.order_service.namespace
-    service_name = "${helm_release.order_service.name}-rest-api"
-    port         = 8000
-    port_forward = "kubectl port-forward -n ${helm_release.order_service.namespace} svc/${helm_release.order_service.name}-rest-api 8080:8000"
-    test_api     = "curl http://localhost:8080/api/v1/orders"
-  }
-}
-
-# Other Outputs
-
-output "namespace_name" {
-  description = "The name of the created namespace"
-  value       = kubernetes_namespace.order_service.metadata[0].name
-}
-
-
-output "namespace_id" {
-  description = "The unique ID of the namespace"
-  value       = kubernetes_namespace.order_service.id
-}
-
-
-output "postgresql_release_name" {
-  description = "The Helm release name for PostgreSQL"
-  value       = helm_release.postgresql.name
-}
-
-output "postgresql_service_name" {
-  description = "The Kubernetes service name for PostgreSQL"
-  value       = "${helm_release.postgresql.name}-postgresql"
-}
-
-output "postgresql_host" {
-  description = "The full DNS name to connect to PostgreSQL from within the cluster"
-  value       = "${helm_release.postgresql.name}-postgresql.${kubernetes_namespace.order_service.metadata[0].name}.svc.cluster.local"
-}
-
-output "db_password" {
-  description = "The PostgreSQL password (sensitive)"
-  value       = random_password.postgres_password.result
-  sensitive   = true # Won't display in terminal output
-}
-
-output "db_secret_name" {
-  description = "The name of the Kubernetes secret containing DB credentials"
-  value       = kubernetes_secret.db_credentials.metadata[0].name
-}
-
-output "app_config_name" {
-  description = "The name of the ConfigMap containing application configuration"
-  value       = kubernetes_config_map.app_config.metadata[0].name
 }
