@@ -1,8 +1,3 @@
-# ============================================================================
-# STAGING ENVIRONMENT CONFIGURATION
-# ============================================================================
-# Use this file: terraform apply -var-file="staging.tfvars"
-
 environment = "staging"
 namespace   = "order-service-staging"
 

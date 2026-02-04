@@ -1,8 +1,3 @@
-# ============================================================================
-# PRODUCTION ENVIRONMENT CONFIGURATION
-# ============================================================================
-# Use this file: terraform apply -var-file="prod.tfvars"
-
 environment = "prod"
 namespace   = "order-service-prod"
 

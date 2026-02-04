@@ -1,6 +1,4 @@
-# ============================================================================
 # NAMESPACE
-# ============================================================================
 
 resource "kubernetes_namespace" "order_service" {
   metadata {
@@ -22,10 +20,7 @@ resource "kubernetes_namespace" "order_service" {
   }
 }
 
-
-# ============================================================================
 # DATABASE PASSWORD GENERATION
-# ============================================================================
 
 resource "random_password" "postgres_password" {
   length           = var.postgres_password_length
@@ -42,10 +37,7 @@ resource "random_password" "postgres_password" {
   }
 }
 
-
-# ============================================================================
 # POSTGRESQL DATABASE
-# ============================================================================
 
 resource "helm_release" "postgresql" {
   name       = "${var.app_name}-postgres"
@@ -64,7 +56,6 @@ resource "helm_release" "postgresql" {
   # These override the default values.yaml in the PostgreSQL chart
   # Same as: helm install --set key=value
 
-  # Set the PostgreSQL password
   set_sensitive {
     name  = "auth.postgresPassword"
     value = random_password.postgres_password.result
@@ -72,19 +63,16 @@ resource "helm_release" "postgresql" {
     # This creates another dependency: password must exist first!
   }
 
-  # Database name
   set {
     name  = "auth.database"
     value = var.postgres_database_name
   }
   
-  # Storage configuration
   set {
     name  = "primary.persistence.size"
     value = var.postgres_storage_size
   }
   
-  # Resource requests
   set {
     name  = "primary.resources.requests.cpu"
     value = var.postgres_resources.requests.cpu
@@ -95,7 +83,6 @@ resource "helm_release" "postgresql" {
     value = var.postgres_resources.requests.memory
   }
   
-  # Resource limits
   set {
     name  = "primary.resources.limits.cpu"
     value = var.postgres_resources.limits.cpu
@@ -113,9 +100,7 @@ resource "helm_release" "postgresql" {
   }
 }
 
-# ============================================================================
 # DATABASE CONNECTION SECRET
-# ============================================================================
 
 resource "kubernetes_secret" "db_credentials" {
   metadata {
@@ -131,7 +116,6 @@ resource "kubernetes_secret" "db_credentials" {
     )
   }
 
-  # Only store sensitive data in the secret
   data = {
     POSTGRES_PASSWORD = random_password.postgres_password.result
   }
@@ -140,9 +124,7 @@ resource "kubernetes_secret" "db_credentials" {
   depends_on = [helm_release.postgresql]
 }
 
-# ============================================================================
 # APPLICATION CONFIGURATION (Non-sensitive)
-# ============================================================================
 
 resource "kubernetes_config_map" "app_config" {
   metadata {
@@ -170,9 +152,7 @@ resource "kubernetes_config_map" "app_config" {
   ]
 }
 
-# ============================================================================
 # DATABASE MIGRATIONS JOB
-# ============================================================================
 
 resource "kubernetes_job_v1" "db_migrations" {
   metadata {
@@ -256,14 +236,12 @@ resource "kubernetes_job_v1" "db_migrations" {
     ]
   }
 
-  # Wait for completion setting from variables
+  # Wait for compxletion setting from variables
   # In prod, this should be true to ensure migrations complete before app starts
   wait_for_completion = var.migration_wait_for_completion
 }
 
-# ============================================================================
 # FASTAPI APPLICATION
-# ============================================================================
 
 resource "helm_release" "order_service" {
   name      = var.app_name
@@ -274,8 +252,6 @@ resource "helm_release" "order_service" {
   timeout = var.helm_timeout
   
   create_namespace = false
-  
-  # ===== IMAGE CONFIGURATION =====
   
   set {
     name  = "image.repository"
@@ -292,27 +268,21 @@ resource "helm_release" "order_service" {
     value = "Never"  # Always use local image for now
   }
   
-  # ===== SCALING =====
-  
   set {
     name  = "replicaCount"
     value = var.app_replica_count
   }
 
-  # Reference the ConfigMap for non-sensitive config
   set {
     name  = "envFromConfigMap"
     value = kubernetes_config_map.app_config.metadata[0].name
   }
 
-  # Reference the Secret for sensitive data
   set {
     name  = "envFromSecret"
     value = kubernetes_secret.db_credentials.metadata[0].name
   }
 
-  # ===== DEPENDENCIES =====
-  # Ensure migrations complete before app starts
   depends_on = [
     helm_release.postgresql,           # Database must be running
     kubernetes_config_map.app_config,  # Config must exist

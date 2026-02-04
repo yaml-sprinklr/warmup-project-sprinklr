@@ -1,4 +1,3 @@
-
 # NAMESPACE OUTPUTS
 
 output "namespace_name" {
