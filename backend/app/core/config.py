@@ -18,10 +18,47 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
+    # Redis Configuration (NEW)
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: str | None = None
+
+    # Redis Cache TTLs (seconds)
+    USER_CACHE_TTL: int = 86400  # 24 hours
+    PROCESSED_EVENT_TTL: int = 604800  # 7 days
+
+    # Kafka Configuration (NEW)
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_CONSUMER_GROUP_ID: str = "order-service"
+
+    # Kafka Topics
+    KAFKA_TOPIC_ORDER_CREATED: str = "order.created"
+    KAFKA_TOPIC_ORDER_CONFIRMED: str = "order.confirmed"
+    KAFKA_TOPIC_ORDER_SHIPPED: str = "order.shipped"
+    KAFKA_TOPIC_ORDER_CANCELLED: str = "order.cancelled"
+    KAFKA_TOPIC_USER_CREATED: str = "user.created"
+    KAFKA_TOPIC_USER_UPDATED: str = "user.updated"
+    KAFKA_TOPIC_USER_DELETED: str = "user.deleted"
+
+    # External Services
+    USER_SERVICE_URL: str = "http://localhost:8001"
+
+    # Metrics Configuration
+    ENABLE_METRICS: bool = True
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @computed_field
+    @property
+    def REDIS_URL(self) -> str:
+        """Construct Redis connection URL"""
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
 settings = Settings()  # type: ignore

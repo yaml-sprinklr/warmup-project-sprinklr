@@ -88,6 +88,24 @@ Liveness and Readiness routes were also added in this milestone.
 
 Cute: add some illustrations for these milestones
 5. `terraform apply` spins up the service and database.
-What are the best practices of using terraform with k8s? which backend should be used -> local or k8s
+Note: What are the best practices of using terraform with k8s? which backend should be used -> local or k8s
+=> Currently, using local without much analysis of choices.
 
 ### Milestone 2
+
+1. Adding Kafka
+2. Using python library `tenacity` for retrying logic.
+3. `aiokafka` vs `confluent-kafka`
+4. strimzi vs bitnami helm chart => A Helm chart (like Bitnami’s) does not do reconciliation—it only deploys resources once.
+Strimzi Advantages:
+Kubernetes-native: Uses CRDs (Custom Resource Definitions) - more aligned with modern K8s practices
+Operator pattern: Continuous reconciliation - if something breaks, Strimzi auto-heals
+Declarative topics: Create Kafka topics as Kubernetes resources (KafkaTopic CRD)
+Production-ready: Rolling updates, monitoring, TLS, ACLs out of the box
+Better for learning: Understand operators, CRDs, and how production Kafka works
+Aligns with your milestone: "Kafka topic(s) created declaratively (CRD or Helm values) via Terraform"
+Helm Chart Limitations:
+No reconciliation (deploy once and forget)
+Topics created via scripts, not declaratively
+Harder to manage at scale
+5.

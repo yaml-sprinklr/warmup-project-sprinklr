@@ -16,7 +16,7 @@ terraform/
 └── README.md            # This file
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -40,47 +40,7 @@ terraform apply
 terraform output
 ```
 
-## 🌍 Multiple Environments
-
-### Development (default)
-
-```bash
-terraform apply
-# Uses terraform.tfvars
 ```
-
-**Characteristics:**
-- 2 replicas
-- Small resources (250m CPU, 256Mi memory)
-- 1Gi storage
-- Monitoring disabled
-- Fast iteration
-
-### Staging
-
-```bash
-terraform apply -var-file="staging.tfvars"
-```
-
-**Characteristics:**
-- 3 replicas
-- Medium resources (500m CPU, 512Mi memory)
-- 10Gi storage
-- Monitoring enabled
-- Production-like environment
-
-### Production
-
-```bash
-terraform apply -var-file="prod.tfvars"
-```
-
-**Characteristics:**
-- 10 replicas
-- Large resources (1-2 CPU cores, 1-2Gi memory)
-- 50Gi storage
-- Monitoring and autoscaling enabled
-- Waits for migrations to complete
 
 ## 📝 Customization
 
