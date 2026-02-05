@@ -1,5 +1,8 @@
 #!/usr/bin/env zsh
 
 http POST http://localhost:8080/api/v1/orders/ \
-  amount:=100 \
-  user_id=550e8400-e29b-41d4-a716-446655440000
+  user_id=550e8400-e29b-41d4-a716-446655440000 \
+  total_amount:=100.0 \
+  currency=USD \
+  shipping_address="221B Baker Street, London" \
+  items:='[{"product_id":"SKU-123","quantity":2,"price":50.0}]'

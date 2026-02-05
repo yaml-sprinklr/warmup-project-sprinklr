@@ -112,26 +112,35 @@ async def handle_user_deleted(event):
         orders = session.exec(statement).all()
 
         for order in orders:
-            order.status = OrderStatus.CANCELLED.value
-            order.updated_at = datetime.now(UTC)
-            session.add(order)
+            try:
+                # Publish event FIRST (before DB commit)
+                await kafka_producer.publish_event(
+                    topic=settings.KAFKA_TOPIC_ORDER_CANCELLED,
+                    event_type="order.cancelled",
+                    data={
+                        "order_id": str(order.id),
+                        "user_id": user_id,
+                        "reason": "user_deleted",
+                        "cancelled_at": datetime.now(UTC).isoformat(),
+                    },
+                    key=user_id,
+                )
 
-            # Publish cancellation event
-            await kafka_producer.publish_event(
-                topic=settings.KAFKA_TOPIC_ORDER_CANCELLED,
-                event_type="order.cancelled",
-                data={
-                    "order_id": str(order.id),
-                    "user_id": user_id,
-                    "reason": "user_deleted",
-                    "cancelled_at": datetime.now(UTC).isoformat(),
-                },
-                key=user_id,
-            )
+                # Then update DB
+                order.status = OrderStatus.CANCELLED.value
+                order.updated_at = datetime.now(UTC)
+                session.add(order)
+                session.commit()
 
-            logger.info(f"✓ Cancelled order {order.id} for deleted user {user_id}")
+                logger.info(f"Cancelled order {order.id} for deleted user {user_id}")
 
-        session.commit()
+            except Exception as e:
+                session.rollback()
+                logger.error(
+                    f"Failed to cancel order {order.id} for user {user_id}: {e}",
+                    exc_info=True,
+                )
+                # Order stays in current state, may retry later
 
     # Clean up cache
     await redis_client.delete(f"user:{user_id}")

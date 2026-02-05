@@ -108,4 +108,6 @@ Helm Chart Limitations:
 No reconciliation (deploy once and forget)
 Topics created via scripts, not declaratively
 Harder to manage at scale
-5.
+5. KafkaNodePool
+6. tenacity
+remaining to implement -> metrics

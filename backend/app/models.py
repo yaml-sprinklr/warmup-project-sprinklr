@@ -1,9 +1,10 @@
 import uuid
 from enum import Enum
 from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import DateTime
-from sqlmodel import Field, SQLModel, Column, String
+from sqlalchemy import DateTime, JSON
+from sqlmodel import Field, SQLModel, Column, String, Relationship
 
 
 def get_datetime_utc() -> datetime:
@@ -35,22 +36,6 @@ class OrderItemCreate(OrderItemBase):
     """Schema for creating order items"""
 
     pass
-
-
-class OrderItem(OrderItemBase, table=True):
-    """Order item database model"""
-
-    __tablename__ = "order_items"
-
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    order_id: uuid.UUID = Field(foreign_key="orders.id", nullable=False)
-
-
-class OrderItemPublic(OrderItemBase):
-    """Public schema for order items"""
-
-    id: uuid.UUID
-    order_id: uuid.UUID
 
 
 # ORDER MODELS
@@ -107,6 +92,25 @@ class Order(OrderBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
+    items: list["OrderItem"] = Relationship(back_populates="order")
+
+
+class OrderItem(OrderItemBase, table=True):
+    """Order item database model"""
+
+    __tablename__ = "order_items"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    order_id: uuid.UUID = Field(foreign_key="orders.id", nullable=False)
+    order: Order | None = Relationship(back_populates="items")
+
+
+class OrderItemPublic(OrderItemBase):
+    """Public schema for order items"""
+
+    id: uuid.UUID
+    order_id: uuid.UUID
+
 
 class OrderPublic(OrderBase):
     """Public order schema"""
@@ -120,7 +124,7 @@ class OrderPublic(OrderBase):
     updated_at: datetime
     confirmed_at: datetime | None
     shipped_at: datetime | None
-    items: list[OrderItemPublic] = []
+    items: list["OrderItemPublic"] = []
 
 
 class OrdersPublic(SQLModel):
@@ -154,3 +158,36 @@ class UserData(SQLModel):
     email: str
     name: str | None = None
     status: str = "active"
+
+
+# OUTBOX PATTERN
+
+
+class OutboxEvent(SQLModel, table=True):
+    """
+    Outbox table for transactional event publishing
+    Events are written here atomically with DB changes, then published by worker
+    """
+
+    __tablename__ = "outbox_events"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    event_id: str = Field(index=True, unique=True)  # For idempotency
+    event_type: str = Field(index=True)
+    topic: str = Field(index=True)
+    partition_key: str | None = Field(default=None)  # For Kafka partitioning
+    payload: dict[str, Any] = Field(sa_column=Column(JSON))
+
+    # Status tracking
+    published: bool = Field(default=False, index=True)
+    published_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    attempts: int = Field(default=0)
+    last_error: str | None = Field(default=None)
+
+    # Timestamps
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )

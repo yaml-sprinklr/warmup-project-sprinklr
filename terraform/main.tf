@@ -192,7 +192,7 @@ resource "kubernetes_config_map" "app_config" {
     POSTGRES_USER   = "postgres"
 
     # Redis Configuration (NEW)
-    REDIS_HOST = "${helm_release.redis.name}-redis-master"
+    REDIS_HOST = "${helm_release.redis.name}-master"
     REDIS_PORT = "6379"
     REDIS_DB   = "0"
 
@@ -210,7 +210,8 @@ resource "kubernetes_config_map" "app_config" {
     KAFKA_TOPIC_USER_DELETED    = "user.deleted"
 
     # User Service API (for fallback)
-  USER_SERVICE_URL = var.user_service_url }
+    USER_SERVICE_URL = var.user_service_url
+  }
 
   depends_on = [
     helm_release.postgresql,
@@ -365,6 +366,211 @@ resource "helm_release" "order_service" {
     kubernetes_config_map.app_config,
     kubernetes_secret.db_credentials,
     kubernetes_job_v1.db_migrations
+  ]
+}
+
+# OUTBOX WORKER DEPLOYMENT
+
+resource "kubernetes_deployment_v1" "outbox_worker" {
+  count = var.outbox_worker_enabled ? 1 : 0
+
+  metadata {
+    name      = "${var.app_name}-outbox-worker"
+    namespace = kubernetes_namespace.order_service.metadata[0].name
+
+    labels = merge(
+      var.common_labels,
+      {
+        app       = var.app_name
+        component = "outbox-worker"
+      }
+    )
+  }
+
+  spec {
+    replicas = var.outbox_worker_replica_count
+
+    selector {
+      match_labels = {
+        app       = var.app_name
+        component = "outbox-worker"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app       = var.app_name
+          component = "outbox-worker"
+        }
+      }
+
+      spec {
+        container {
+          name  = "outbox-worker"
+          image = "${var.outbox_worker_image_repository}:${var.outbox_worker_image_tag}"
+
+          command = ["python", "-m", "app.workers.outbox_worker"]
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.app_config.metadata[0].name
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.db_credentials.metadata[0].name
+            }
+          }
+
+          resources {
+            requests = {
+              cpu    = var.outbox_worker_resources.requests.cpu
+              memory = var.outbox_worker_resources.requests.memory
+            }
+            limits = {
+              cpu    = var.outbox_worker_resources.limits.cpu
+              memory = var.outbox_worker_resources.limits.memory
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_config_map.app_config,
+    kubernetes_secret.db_credentials,
+    kubernetes_job_v1.db_migrations
+  ]
+}
+
+# MOCK USER PRODUCER DEPLOYMENT (for testing)
+
+resource "kubernetes_deployment_v1" "mock_user_producer" {
+  count = var.mock_user_producer_enabled ? 1 : 0
+
+  metadata {
+    name      = "${var.app_name}-mock-user-producer"
+    namespace = kubernetes_namespace.order_service.metadata[0].name
+
+    labels = merge(
+      var.common_labels,
+      {
+        app       = var.app_name
+        component = "mock-user-producer"
+      }
+    )
+
+    annotations = {
+      description = "Mock user service that produces user lifecycle events for testing"
+    }
+  }
+
+  spec {
+    replicas = var.mock_user_producer_replica_count
+
+    selector {
+      match_labels = {
+        app       = var.app_name
+        component = "mock-user-producer"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app       = var.app_name
+          component = "mock-user-producer"
+        }
+
+        annotations = {
+          "prometheus.io/scrape" = "false" # No metrics endpoint yet
+        }
+      }
+
+      spec {
+        restart_policy = "Always"
+
+        container {
+          name  = "mock-producer"
+          image = "${var.mock_user_producer_image_repository}:${var.mock_user_producer_image_tag}"
+
+          command = ["python", "-m", "app.producers.user_producer_mock"]
+
+          # Load Kafka configuration from ConfigMap
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.app_config.metadata[0].name
+            }
+          }
+
+          # Override default intervals if specified
+          dynamic "env" {
+            for_each = var.mock_user_producer_create_interval != null ? [1] : []
+            content {
+              name  = "MOCK_USER_CREATE_INTERVAL"
+              value = tostring(var.mock_user_producer_create_interval)
+            }
+          }
+
+          dynamic "env" {
+            for_each = var.mock_user_producer_update_interval != null ? [1] : []
+            content {
+              name  = "MOCK_USER_UPDATE_INTERVAL"
+              value = tostring(var.mock_user_producer_update_interval)
+            }
+          }
+
+          dynamic "env" {
+            for_each = var.mock_user_producer_delete_interval != null ? [1] : []
+            content {
+              name  = "MOCK_USER_DELETE_INTERVAL"
+              value = tostring(var.mock_user_producer_delete_interval)
+            }
+          }
+
+          dynamic "env" {
+            for_each = var.mock_user_producer_max_users != null ? [1] : []
+            content {
+              name  = "MOCK_USER_MAX_USERS"
+              value = tostring(var.mock_user_producer_max_users)
+            }
+          }
+
+          resources {
+            requests = {
+              cpu    = var.mock_user_producer_resources.requests.cpu
+              memory = var.mock_user_producer_resources.requests.memory
+            }
+            limits = {
+              cpu    = var.mock_user_producer_resources.limits.cpu
+              memory = var.mock_user_producer_resources.limits.memory
+            }
+          }
+
+          # Liveness probe - check if process is alive
+          liveness_probe {
+            exec {
+              command = ["pgrep", "-f", "user_producer_mock"]
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 30
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_config_map.app_config,
+    kubernetes_manifest.kafka_cluster,
+    kubernetes_manifest.topic_user_created,
+    kubernetes_manifest.topic_user_updated,
+    kubernetes_manifest.topic_user_deleted
   ]
 }
 

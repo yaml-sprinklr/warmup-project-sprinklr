@@ -14,6 +14,7 @@ from app.core.kafka import kafka_producer, kafka_consumer
 # from app.core.metrics import registry
 from app.api.main import api_router
 from app.consumers import start_consumer
+from app.processors import start_order_processor
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Manage application lifecycle"""
     consumer_task = None
+    processor_task = None
 
     logger.info("Starting Order Service...")
 
@@ -35,6 +37,9 @@ async def lifespan(app: FastAPI):
         await kafka_consumer.start()
 
         consumer_task = asyncio.create_task(start_consumer(), name="kafka-consumer")
+        processor_task = asyncio.create_task(
+            start_order_processor(), name="order-processor"
+        )
 
         logger.info("All services started")
     except Exception as e:
@@ -50,6 +55,13 @@ async def lifespan(app: FastAPI):
             consumer_task.cancel()
             try:
                 await consumer_task
+            except asyncio.CancelledError:
+                pass
+
+        if processor_task and not processor_task.done():
+            processor_task.cancel()
+            try:
+                await processor_task
             except asyncio.CancelledError:
                 pass
 

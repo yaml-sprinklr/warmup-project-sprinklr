@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     # Metrics Configuration
     ENABLE_METRICS: bool = True
 
+    # Order Processor Configuration (seconds)
+    ORDER_CONFIRM_DELAY: int = 30  # Time before auto-confirming pending orders
+    ORDER_SHIP_DELAY: int = 120  # Time before auto-shipping confirmed orders (2 minutes)
+    ORDER_PROCESSOR_INTERVAL: int = 10  # How often processor checks for orders
+
+    # Mock User Producer Configuration (seconds)
+    MOCK_USER_CREATE_INTERVAL: int = 10  # Create user every N seconds
+    MOCK_USER_UPDATE_INTERVAL: int = 15  # Update user every N seconds
+    MOCK_USER_DELETE_INTERVAL: int = 30  # Delete user every N seconds
+    MOCK_USER_MAX_USERS: int = 50  # Maximum active users
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
