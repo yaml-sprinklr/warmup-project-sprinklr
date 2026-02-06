@@ -19,7 +19,7 @@ class OrderCreatedData(BaseEventData):
     quantity: int | None = Field(default=None, gt=0)
     total_amount: Decimal
     currency: str = "USD"
-    shipping_address: dict | None = None
+    shipping_address: str | None = None
     items: list[dict] | None = None  # For multi-item orders
     created_at: datetime
 

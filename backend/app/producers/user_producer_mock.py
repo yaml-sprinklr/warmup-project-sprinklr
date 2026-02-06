@@ -76,7 +76,7 @@ async def create_user_event():
             data=event_data.model_dump(mode="json"),
             key=user_id,
         )
-        logger.info(f"✓ Created user {user_id} ({user_data['email']})")
+        logger.info(f"Created user {user_id} ({user_data['email']})")
     except Exception as e:
         logger.error(f"Failed to publish user.created event: {e}")
         # Remove from local cache if publish failed
@@ -123,7 +123,7 @@ async def update_user_event():
             data=event_data.model_dump(mode="json"),
             key=user_id,
         )
-        logger.info(f"✓ Updated user {user_id} ({user['email']}) - changes: {updates}")
+        logger.info(f"Updated user {user_id} ({user['email']}) - changes: {updates}")
     except Exception as e:
         logger.error(f"Failed to publish user.updated event: {e}")
 
@@ -151,7 +151,7 @@ async def delete_user_event():
             data=event_data.model_dump(mode="json"),
             key=user_id,
         )
-        logger.info(f"✓ Deleted user {user_id} ({user['email']})")
+        logger.info(f"Deleted user {user_id} ({user['email']})")
     except Exception as e:
         logger.error(f"Failed to publish user.deleted event: {e}")
         # Add back to cache if publish failed
@@ -244,7 +244,7 @@ async def main():
         sys.exit(1)
     finally:
         await kafka_producer.stop()
-        logger.info(f"✓ Mock User Service Producer shutdown complete (created {len(active_users)} users)")
+        logger.info(f"Mock User Service Producer shutdown complete (created {len(active_users)} users)")
 
 
 if __name__ == "__main__":

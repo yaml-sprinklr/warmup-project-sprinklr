@@ -93,7 +93,7 @@ async def process_pending_orders():
                 session.commit()  # Atomic: order + outbox event
 
                 logger.info(
-                    f"✓ Confirmed order {order.id} with payment {payment_id}"
+                    f"Confirmed order {order.id} with payment {payment_id}"
                 )
 
             except Exception as e:
@@ -158,7 +158,7 @@ async def process_confirmed_orders():
                 session.commit()  # Atomic: order + outbox event
 
                 logger.info(
-                    f"✓ Shipped order {order.id} with tracking {tracking_number}"
+                    f"Shipped order {order.id} with tracking {tracking_number}"
                 )
 
             except Exception as e:

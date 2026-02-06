@@ -103,7 +103,7 @@ async def handle_user_updated(event):
         event_data.model_dump(mode="json"), 
         ttl=settings.USER_CACHE_TTL
     )
-    logger.info(f"✓ Updated cache for user {event_data.user_id}")
+    logger.info(f"Updated cache for user {event_data.user_id}")
 
 
 async def handle_user_deleted(event):
@@ -155,4 +155,4 @@ async def handle_user_deleted(event):
 
     # Clean up cache
     await redis_client.delete(f"user:{event_data.user_id}")
-    logger.info(f"✓ Cleaned up cache for deleted user {event_data.user_id}")
+    logger.info(f"Cleaned up cache for deleted user {event_data.user_id}")
