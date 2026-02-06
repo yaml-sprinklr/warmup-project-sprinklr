@@ -58,6 +58,23 @@ resource "helm_release" "kube_prometheus_stack" {
     value = var.order_service_namespace
   }
 
+  # PodMonitor selector - must match our PodMonitor labels
+  set {
+    name  = "prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues"
+    value = "false"
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.podMonitorSelector.matchLabels.prometheus"
+    value = "kube-prometheus"
+  }
+
+  # Allow PodMonitors in the Order Service namespace
+  set {
+    name  = "prometheus.prometheusSpec.podMonitorNamespaceSelector.matchNames[0]"
+    value = var.order_service_namespace
+  }
+
   # PrometheusRule selector - must match our PrometheusRule labels
   set {
     name  = "prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues"
@@ -336,6 +353,65 @@ resource "kubernetes_manifest" "postgres_servicemonitor" {
   depends_on = [helm_release.kube_prometheus_stack, helm_release.postgresql]
 }
 
+# Strimzi Kafka PodMonitor (metrics reporter exposes metrics on pod ports)
+resource "kubernetes_manifest" "strimzi_kafka_podmonitor" {
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "PodMonitor"
+    metadata = {
+      name      = "strimzi-kafka"
+      namespace = var.order_service_namespace
+      labels = {
+        prometheus = "kube-prometheus"
+      }
+    }
+    spec = {
+      selector = {
+        matchLabels = {
+          "strimzi.io/cluster" = "${var.app_name}-kafka"
+          "strimzi.io/kind"    = "Kafka"
+          "strimzi.io/name"    = "${var.app_name}-kafka-kafka"
+        }
+      }
+      namespaceSelector = {
+        matchNames = [var.order_service_namespace]
+      }
+      podMetricsEndpoints = [
+        {
+          port          = "tcp-prometheus"
+          path          = "/metrics"
+          interval      = "15s"
+          scrapeTimeout = "10s"
+          relabelings = [
+            {
+              sourceLabels = ["__meta_kubernetes_pod_name"]
+              targetLabel  = "kubernetes_pod_name"
+            },
+            {
+              sourceLabels = ["__meta_kubernetes_pod_name"]
+              targetLabel  = "pod"
+            },
+            {
+              sourceLabels = ["__meta_kubernetes_namespace"]
+              targetLabel  = "namespace"
+            },
+            {
+              sourceLabels = ["__meta_kubernetes_pod_label_strimzi_io_cluster"]
+              targetLabel  = "strimzi_io_cluster"
+            },
+            {
+              sourceLabels = ["__meta_kubernetes_pod_label_strimzi_io_name"]
+              targetLabel  = "strimzi_io_name"
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  depends_on = [helm_release.kube_prometheus_stack, kubernetes_manifest.kafka_cluster]
+}
+
 # Custom alert rules
 resource "kubernetes_manifest" "order_service_alerts" {
   manifest = {
@@ -516,6 +592,23 @@ resource "kubernetes_config_map" "grafana_postgres_dashboard" {
 
   data = {
     "postgres-dashboard.json" = file("${path.module}/grafana/dashboards/postgres-dashboard.json")
+  }
+
+  depends_on = [helm_release.kube_prometheus_stack]
+}
+
+# Grafana Dashboard ConfigMap (Strimzi Kafka)
+resource "kubernetes_config_map" "grafana_strimzi_kafka_dashboard" {
+  metadata {
+    name      = "strimzi-kafka-dashboard"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      grafana_dashboard = "1"
+    }
+  }
+
+  data = {
+    "strimzi-kafka-dashboard.json" = file("${path.module}/grafana/dashboards/strimzi-kafka-dashboard.json")
   }
 
   depends_on = [helm_release.kube_prometheus_stack]

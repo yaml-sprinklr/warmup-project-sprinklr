@@ -686,6 +686,19 @@ resource "kubernetes_manifest" "kafka_cluster" {
 
         metadataVersion = "4.1-IV1" # KRaft metadata version
 
+        metricsConfig = {
+          type = "strimziMetricsReporter"
+          # Strimzi Metricss Reporter will automatically include some sensible default Kafka metrics, so no need to specify them manually
+          # values = {
+          #   allowList = [
+          #     "kafka_log.*",
+          #     "kafka_network.*",
+          #     "kafka_server.*",
+          #     "kafka_controller.*"
+          #   ]
+          # }
+        }
+
         listeners = [
           {
             name = "plain"
