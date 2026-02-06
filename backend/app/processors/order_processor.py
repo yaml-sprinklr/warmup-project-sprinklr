@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.db import engine
 from app.models import Order, OrderStatus
 from app.services import OutboxService
+from app.events import OrderConfirmedData, OrderShippedData
 
 logger = logging.getLogger(__name__)
 
@@ -69,20 +70,22 @@ async def process_pending_orders():
                 order.payment_id = payment_id
                 order.updated_at = confirmed_at
 
+                # Create typed event data
+                event_data = OrderConfirmedData(
+                    order_id=str(order.id),
+                    user_id=order.user_id,
+                    payment_id=payment_id,
+                    total_amount=order.total_amount,
+                    currency=order.currency,
+                    confirmed_at=confirmed_at,
+                )
+
                 # Write event to outbox (same transaction)
                 OutboxService.create_event(
                     session=session,
                     event_type="order.confirmed",
                     topic=settings.KAFKA_TOPIC_ORDER_CONFIRMED,
-                    data={
-                        "order_id": str(order.id),
-                        "user_id": order.user_id,
-                        "status": "confirmed",
-                        "payment_id": payment_id,
-                        "total_amount": order.total_amount,
-                        "currency": order.currency,
-                        "confirmed_at": confirmed_at.isoformat(),
-                    },
+                    event_data=event_data,
                     partition_key=order.user_id,
                 )
 
@@ -132,20 +135,22 @@ async def process_confirmed_orders():
                 order.carrier = carrier
                 order.updated_at = shipped_at
 
+                # Create typed event data
+                event_data = OrderShippedData(
+                    order_id=str(order.id),
+                    user_id=order.user_id,
+                    tracking_number=tracking_number,
+                    carrier=carrier,
+                    estimated_delivery=estimated_delivery,
+                    shipped_at=shipped_at,
+                )
+
                 # Write event to outbox (same transaction)
                 OutboxService.create_event(
                     session=session,
                     event_type="order.shipped",
                     topic=settings.KAFKA_TOPIC_ORDER_SHIPPED,
-                    data={
-                        "order_id": str(order.id),
-                        "user_id": order.user_id,
-                        "status": "shipped",
-                        "tracking_number": tracking_number,
-                        "carrier": carrier,
-                        "estimated_delivery": estimated_delivery.isoformat(),
-                        "shipped_at": shipped_at.isoformat(),
-                    },
+                    event_data=event_data,
                     partition_key=order.user_id,
                 )
 

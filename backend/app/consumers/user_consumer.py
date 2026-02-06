@@ -10,6 +10,7 @@ from app.core.kafka import kafka_consumer, kafka_producer
 from app.core.db import engine
 from sqlmodel import Session, select
 from app.models import Order, OrderStatus
+from app.events import UserCreatedData, UserUpdatedData, UserDeletedData, OrderCancelledData
 
 logger = logging.getLogger(__name__)
 
@@ -79,51 +80,61 @@ async def handle_message(message):
 
 async def handle_user_created(event):
     """Cache new user data"""
-    user_data = event["data"]
-    user_id = user_data["user_id"]
-
+    # Validate and parse event data
+    event_data = UserCreatedData(**event["data"])
+    
+    # Cache the data
     await redis_client.set_json(
-        f"user:{user_id}", user_data, ttl=settings.USER_CACHE_TTL
+        f"user:{event_data.user_id}", 
+        event_data.model_dump(mode="json"), 
+        ttl=settings.USER_CACHE_TTL
     )
-    logger.info(f"Cached user {user_id}")
+    logger.info(f"Cached user {event_data.user_id}")
 
 
 async def handle_user_updated(event):
     """Update cached user data"""
-    user_data = event["data"]
-    user_id = user_data["user_id"]
-
+    # Validate and parse event data
+    event_data = UserUpdatedData(**event["data"])
+    
+    # Cache the updated data
     await redis_client.set_json(
-        f"user:{user_id}", user_data, ttl=settings.USER_CACHE_TTL
+        f"user:{event_data.user_id}", 
+        event_data.model_dump(mode="json"), 
+        ttl=settings.USER_CACHE_TTL
     )
-    logger.info(f"✓ Updated cache for user {user_id}")
+    logger.info(f"✓ Updated cache for user {event_data.user_id}")
 
 
 async def handle_user_deleted(event):
     """Cancel pending orders and clean up cache"""
-    user_id = event["data"]["user_id"]
+    # Validate and parse event data
+    event_data = UserDeletedData(**event["data"])
 
     # Cancel pending orders
     with Session(engine) as session:
         statement = select(Order).where(
-            Order.user_id == user_id,
+            Order.user_id == event_data.user_id,
             Order.status.in_([OrderStatus.PENDING.value, OrderStatus.CONFIRMED.value]),  # type: ignore[attr-defined]
         )
         orders = session.exec(statement).all()
 
         for order in orders:
             try:
+                # Create typed event data
+                cancel_data = OrderCancelledData(
+                    order_id=str(order.id),
+                    user_id=event_data.user_id,
+                    reason="user_deleted",
+                    cancelled_at=datetime.now(UTC),
+                )
+                
                 # Publish event FIRST (before DB commit)
                 await kafka_producer.publish_event(
                     topic=settings.KAFKA_TOPIC_ORDER_CANCELLED,
                     event_type="order.cancelled",
-                    data={
-                        "order_id": str(order.id),
-                        "user_id": user_id,
-                        "reason": "user_deleted",
-                        "cancelled_at": datetime.now(UTC).isoformat(),
-                    },
-                    key=user_id,
+                    data=cancel_data.model_dump(mode="json"),
+                    key=event_data.user_id,
                 )
 
                 # Then update DB
@@ -132,16 +143,16 @@ async def handle_user_deleted(event):
                 session.add(order)
                 session.commit()
 
-                logger.info(f"Cancelled order {order.id} for deleted user {user_id}")
+                logger.info(f"Cancelled order {order.id} for deleted user {event_data.user_id}")
 
             except Exception as e:
                 session.rollback()
                 logger.error(
-                    f"Failed to cancel order {order.id} for user {user_id}: {e}",
+                    f"Failed to cancel order {order.id} for user {event_data.user_id}: {e}",
                     exc_info=True,
                 )
                 # Order stays in current state, may retry later
 
     # Clean up cache
-    await redis_client.delete(f"user:{user_id}")
-    logger.info(f"✓ Cleaned up cache for deleted user {user_id}")
+    await redis_client.delete(f"user:{event_data.user_id}")
+    logger.info(f"✓ Cleaned up cache for deleted user {event_data.user_id}")

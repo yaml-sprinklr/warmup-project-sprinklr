@@ -11,6 +11,7 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.models import OutboxEvent
+from app.events.base import BaseEventData
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class OutboxService:
         session: Session,
         event_type: str,
         topic: str,
-        data: dict[str, Any],
+        event_data: BaseEventData,
         partition_key: str | None = None,
     ) -> OutboxEvent:
         """
@@ -33,7 +34,7 @@ class OutboxService:
             session: Database session (must be same as business logic transaction)
             event_type: Type of event (e.g., "order.created")
             topic: Kafka topic name
-            data: Event payload
+            event_data: Pydantic model with event payload
             partition_key: Key for Kafka partitioning (usually user_id)
 
         Returns:
@@ -47,7 +48,7 @@ class OutboxService:
             "event_type": event_type,
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "1.0",
-            "data": data,
+            "data": event_data.model_dump(mode="json"),
         }
 
         outbox_event = OutboxEvent(

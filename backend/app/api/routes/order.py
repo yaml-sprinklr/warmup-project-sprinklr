@@ -8,6 +8,7 @@ from app.deps import SessionDep
 from app.models import Order, OrderCreate, OrderItem, OrderPublic, OrdersPublic
 from app.services import OutboxService
 from app.core.config import settings
+from app.events import OrderCreatedData
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -39,28 +40,31 @@ async def create_order(*, session: SessionDep, order_in: OrderCreate):
     order.items = [OrderItem(**item.model_dump()) for item in order_in.items]
     session.add(order)
 
+    # Create typed event data
+    event_data = OrderCreatedData(
+        order_id=str(order.id),
+        user_id=order.user_id,
+        status=order.status,
+        total_amount=order.total_amount,
+        currency=order.currency,
+        shipping_address=order.shipping_address,
+        items=[
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "price": item.price,
+            }
+            for item in order_in.items
+        ],
+        created_at=order.created_at,
+    )
+
     # Write event to outbox (same transaction as order creation)
     OutboxService.create_event(
         session=session,
         event_type="order.created",
         topic=settings.KAFKA_TOPIC_ORDER_CREATED,
-        data={
-            "order_id": str(order.id),
-            "user_id": order.user_id,
-            "status": order.status,
-            "total_amount": order.total_amount,
-            "currency": order.currency,
-            "shipping_address": order.shipping_address,
-            "items": [
-                {
-                    "product_id": item.product_id,
-                    "quantity": item.quantity,
-                    "price": item.price,
-                }
-                for item in order_in.items
-            ],
-            "created_at": order.created_at.isoformat(),
-        },
+        event_data=event_data,
         partition_key=order.user_id,
     )
 

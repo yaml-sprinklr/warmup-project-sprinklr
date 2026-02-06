@@ -15,6 +15,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.kafka import kafka_producer
+from app.events import UserCreatedData, UserUpdatedData, UserDeletedData
 
 # Configure logging
 logging.basicConfig(
@@ -66,10 +67,13 @@ async def create_user_event():
     active_users[user_id] = user_data
     
     try:
+        # Create typed event data
+        event_data = UserCreatedData(**user_data)
+        
         await kafka_producer.publish_event(
             topic=settings.KAFKA_TOPIC_USER_CREATED,
             event_type="user.created",
-            data=user_data,
+            data=event_data.model_dump(mode="json"),
             key=user_id,
         )
         logger.info(f"✓ Created user {user_id} ({user_data['email']})")
@@ -100,19 +104,23 @@ async def update_user_event():
         user["status"] = new_status
         updates["status"] = new_status
     
-    user["updated_at"] = datetime.now(UTC).isoformat()
+    updated_at = datetime.now(UTC)
+    user["updated_at"] = updated_at.isoformat()
     
     try:
+        # Create typed event data
+        event_data = UserUpdatedData(
+            user_id=user_id,
+            email=user["email"],
+            name=user.get("name"),
+            status=user["status"],
+            updated_at=updated_at,
+        )
+        
         await kafka_producer.publish_event(
             topic=settings.KAFKA_TOPIC_USER_UPDATED,
             event_type="user.updated",
-            data={
-                "user_id": user_id,
-                "email": user["email"],
-                "name": user.get("name"),
-                "status": user["status"],
-                "updated_at": user["updated_at"],
-            },
+            data=event_data.model_dump(mode="json"),
             key=user_id,
         )
         logger.info(f"✓ Updated user {user_id} ({user['email']}) - changes: {updates}")
@@ -130,14 +138,17 @@ async def delete_user_event():
     user = active_users.pop(user_id)
     
     try:
+        # Create typed event data
+        event_data = UserDeletedData(
+            user_id=user_id,
+            deleted_at=datetime.now(UTC),
+            reason="simulated_deletion"
+        )
+        
         await kafka_producer.publish_event(
             topic=settings.KAFKA_TOPIC_USER_DELETED,
             event_type="user.deleted",
-            data={
-                "user_id": user_id,
-                "email": user["email"],
-                "deleted_at": datetime.now(UTC).isoformat(),
-            },
+            data=event_data.model_dump(mode="json"),
             key=user_id,
         )
         logger.info(f"✓ Deleted user {user_id} ({user['email']})")
@@ -199,7 +210,7 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     logger.info("🚀 Starting Mock User Service Producer...")
-    logger.info(f"Configuration:")
+    logger.info("Configuration:")
     logger.info(f"  - Create user every {settings.MOCK_USER_CREATE_INTERVAL}s")
     logger.info(f"  - Update user every {settings.MOCK_USER_UPDATE_INTERVAL}s")
     logger.info(f"  - Delete user every {settings.MOCK_USER_DELETE_INTERVAL}s")
