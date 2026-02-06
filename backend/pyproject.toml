@@ -3,9 +3,11 @@ name = "app"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "aiohttp>=3.13.3",
     "aiokafka>=0.13.0",
     "alembic>=1.18.1",
     "fastapi[standard]>=0.128.0",
+    "prometheus-client>=0.24.1",
     "psycopg[binary]>=3.3.2",
     "redis>=7.1.0",
     "sqlmodel>=0.0.31",

@@ -5,9 +5,8 @@ from datetime import UTC, datetime
 from app.core.config import settings
 from app.core.redis import redis_client
 from app.core.kafka import kafka_consumer, kafka_producer
-
-# from app.core.metrics import events_consumed_total, consume_errors_total
 from app.core.db import engine
+from app.core.metrics import kafka_events_consumed_total, kafka_events_duplicate_total
 from sqlmodel import Session, select
 from app.models import Order, OrderStatus
 from app.events import UserCreatedData, UserUpdatedData, UserDeletedData, OrderCancelledData
@@ -44,6 +43,13 @@ async def handle_message(message):
     cache_key = f"processed_event:{event_id}"
     if await redis_client.exists(cache_key):
         logger.debug(f"Duplicate event {event_id}, skipping")
+        
+        # Track duplicate
+        kafka_events_duplicate_total.labels(
+            topic=message.topic,
+            event_type=event_type
+        ).inc()
+        
         await kafka_consumer.commit()
         return
 
@@ -63,18 +69,23 @@ async def handle_message(message):
         # Commit offset
         await kafka_consumer.commit()
 
-        # # Metrics
-        # events_consumed_total.labels(
-        #     topic=message.topic,
-        #     event_type=event_type
-        # ).inc()
+        # Track successful consumption
+        kafka_events_consumed_total.labels(
+            topic=message.topic,
+            event_type=event_type,
+            status="success"
+        ).inc()
 
     except Exception as e:
         logger.error(f"Failed to process event {event_id}: {e}", exc_info=True)
-        # consume_errors_total.labels(
-        #     topic=message.topic,
-        #     error_type=type(e).__name__
-        # ).inc()
+        
+        # Track failed consumption
+        kafka_events_consumed_total.labels(
+            topic=message.topic,
+            event_type=event_type,
+            status="failure"
+        ).inc()
+        
         # Don't commit - will retry
 
 

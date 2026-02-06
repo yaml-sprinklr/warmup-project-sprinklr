@@ -1,0 +1,705 @@
+{
+  "title": "Postgres Metrics",
+  "tags": [
+    "postgres",
+    "database",
+    "prometheus",
+    "monitoring"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "Postgres Overview",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Postgres Up",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_up)",
+          "legendFormat": "Up"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Exporter Scrape Duration",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_exporter_last_scrape_duration_seconds)",
+          "legendFormat": "Last Scrape"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "yellow"
+              },
+              {
+                "value": 2,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Scrape Errors",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_exporter_last_scrape_error)",
+          "legendFormat": "Last Error"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Exporter Scrapes / hour",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "increase(pg_exporter_scrapes_total[1h])",
+          "legendFormat": "Scrapes/hour"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "title": "Exporter Health",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Collector Duration & Success",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(pg_scrape_collector_duration_seconds[5m])",
+          "legendFormat": "Collector Duration"
+        },
+        {
+          "expr": "max(pg_scrape_collector_success)",
+          "legendFormat": "Collector Success"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Exporter Scrape Rate & Errors",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(pg_exporter_scrapes_total[5m])",
+          "legendFormat": "Scrapes/sec"
+        },
+        {
+          "expr": "max(pg_exporter_last_scrape_error)",
+          "legendFormat": "Last Scrape Error"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Rate / Error"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Connections & Locks",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Connections & Locks",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(pg_database_connection_limit)",
+          "legendFormat": "Connection Limit"
+        },
+        {
+          "expr": "sum(pg_stat_database_numbackends)",
+          "legendFormat": "Active Backends"
+        },
+        {
+          "expr": "sum(pg_locks_count)",
+          "legendFormat": "Locks"
+        },
+        {
+          "expr": "sum(pg_roles_connection_limit)",
+          "legendFormat": "Role Connection Limit"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Count"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Database Size & Temp Files",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(5, pg_database_size_bytes)",
+          "legendFormat": "{{datname}} size"
+        },
+        {
+          "expr": "topk(5, pg_stat_database_temp_bytes)",
+          "legendFormat": "{{datname}} temp bytes"
+        },
+        {
+          "expr": "topk(5, pg_stat_database_temp_files)",
+          "legendFormat": "{{datname}} temp files"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "bytes",
+          "label": "Bytes"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Replication",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Replication Lag & Replay",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_lag_seconds",
+          "legendFormat": "Lag"
+        },
+        {
+          "expr": "pg_replication_last_replay_seconds",
+          "legendFormat": "Last Replay"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Seconds"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Replication Conflicts",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_database_conflicts)",
+          "legendFormat": "Total Conflicts"
+        },
+        {
+          "expr": "sum(pg_stat_database_conflicts_confl_lock)",
+          "legendFormat": "Lock Conflicts"
+        },
+        {
+          "expr": "sum(pg_stat_database_conflicts_confl_deadlock)",
+          "legendFormat": "Deadlocks"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Conflicts"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "WAL & Background Writer",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "WAL Activity",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "pg_wal_size_bytes",
+          "legendFormat": "WAL Size"
+        },
+        {
+          "expr": "pg_wal_segments",
+          "legendFormat": "Segments"
+        },
+        {
+          "expr": "pg_settings_wal_keep_size_bytes",
+          "legendFormat": "Configured Keep Size"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "bytes",
+          "label": "Bytes"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "BGWriter Activity",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "pg_stat_bgwriter_buffers_alloc_total",
+          "legendFormat": "Buffers Alloc"
+        },
+        {
+          "expr": "pg_stat_bgwriter_buffers_clean_total",
+          "legendFormat": "Buffers Clean"
+        },
+        {
+          "expr": "pg_stat_bgwriter_maxwritten_clean_total",
+          "legendFormat": "Max Clean"
+        },
+        {
+          "expr": "pg_stat_bgwriter_stats_reset_total",
+          "legendFormat": "Resets"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "none",
+          "label": "Counts"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Database Activity",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Transaction Throughput",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(pg_stat_database_xact_commit[5m]))",
+          "legendFormat": "Commits/sec"
+        },
+        {
+          "expr": "sum(rate(pg_stat_database_xact_rollback[5m]))",
+          "legendFormat": "Rollbacks/sec"
+        },
+        {
+          "expr": "sum(pg_stat_activity_count)",
+          "legendFormat": "Active Sessions"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Rate / Count"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Temp Files & Deadlocks",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_database_temp_bytes)",
+          "legendFormat": "Temp Bytes"
+        },
+        {
+          "expr": "sum(pg_stat_database_temp_files)",
+          "legendFormat": "Temp Files"
+        },
+        {
+          "expr": "sum(pg_stat_database_deadlocks)",
+          "legendFormat": "Deadlocks"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "bytes",
+          "label": "Bytes"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Configuration",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Max Connections",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_settings_max_connections)",
+          "legendFormat": "Max Connections"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Shared Buffers",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 51,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_settings_shared_buffers_bytes)",
+          "legendFormat": "Shared Buffers"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "Effective Cache Size",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_settings_effective_cache_size_bytes)",
+          "legendFormat": "Cache Size"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "Autovacuum Workers",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 51,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "max(pg_settings_autovacuum_max_workers)",
+          "legendFormat": "Autovacuum Workers"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    }
+  ]
+}

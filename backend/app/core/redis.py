@@ -1,10 +1,18 @@
 import json
 import logging
+import time
 from typing import Any
 
 from redis.exceptions import RedisError, ConnectionError, TimeoutError
 import redis.asyncio as redis
 from app.core.config import settings
+from app.core.metrics import (
+    redis_commands_total,
+    redis_command_duration_seconds,
+    cache_hits_total,
+    cache_misses_total,
+    redis_errors_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +70,28 @@ class RedisClient:
         if not self.client:
             raise RuntimeError("Redis client not connected")
 
+        start_time = time.time()
         try:
-            return await self.client.get(key)
+            result = await self.client.get(key)
+            duration = time.time() - start_time
+            
+            # Track command execution
+            redis_commands_total.labels(command="get").inc()
+            redis_command_duration_seconds.labels(command="get").observe(duration)
+            
+            # Track cache hits/misses
+            if result is not None:
+                cache_hits_total.inc()
+            else:
+                cache_misses_total.inc()
+            
+            return result
         except (ConnectionError, TimeoutError) as e:
+            redis_errors_total.labels(error_type="connection").inc()
             logger.error(f"Redis connection/timeout error for GET {key}: {e}")
             raise
         except RedisError as e:
+            redis_errors_total.labels(error_type="other").inc()
             logger.error(f"Redis error for GET {key}: {e}")
             raise
 
@@ -105,16 +129,25 @@ class RedisClient:
         if not self.client:
             raise RuntimeError("Redis client not connected")
 
+        start_time = time.time()
+        command = "setex" if ttl else "set"
         try:
             if ttl:
                 await self.client.setex(key, ttl, value)
             else:
                 await self.client.set(key, value)
+            
+            duration = time.time() - start_time
+            redis_commands_total.labels(command=command).inc()
+            redis_command_duration_seconds.labels(command=command).observe(duration)
+            
             return True
         except (ConnectionError, TimeoutError) as e:
+            redis_errors_total.labels(error_type="connection").inc()
             logger.error(f"Redis connection/timeout error for SET {key}: {e}")
             raise
         except RedisError as e:
+            redis_errors_total.labels(error_type="other").inc()
             logger.error(f"Redis error for SET {key}: {e}")
             raise
 
@@ -135,12 +168,21 @@ class RedisClient:
         if not self.client:
             raise RuntimeError("Redis client not connected")
 
+        start_time = time.time()
         try:
-            return await self.client.delete(key)
+            result = await self.client.delete(key)
+            duration = time.time() - start_time
+            
+            redis_commands_total.labels(command="delete").inc()
+            redis_command_duration_seconds.labels(command="delete").observe(duration)
+            
+            return result
         except (ConnectionError, TimeoutError) as e:
+            redis_errors_total.labels(error_type="connection").inc()
             logger.error(f"Redis connection/timeout error for DELETE {key}: {e}")
             raise
         except RedisError as e:
+            redis_errors_total.labels(error_type="other").inc()
             logger.error(f"Redis error for DELETE {key}: {e}")
             raise
 
@@ -161,12 +203,21 @@ class RedisClient:
         if not self.client:
             raise RuntimeError("Redis client not connected")
 
+        start_time = time.time()
         try:
-            return bool(await self.client.exists(key))
+            result = bool(await self.client.exists(key))
+            duration = time.time() - start_time
+            
+            redis_commands_total.labels(command="exists").inc()
+            redis_command_duration_seconds.labels(command="exists").observe(duration)
+            
+            return result
         except (ConnectionError, TimeoutError) as e:
+            redis_errors_total.labels(error_type="connection").inc()
             logger.error(f"Redis connection/timeout error for EXISTS {key}: {e}")
             raise
         except RedisError as e:
+            redis_errors_total.labels(error_type="other").inc()
             logger.error(f"Redis error for EXISTS {key}: {e}")
             raise
 

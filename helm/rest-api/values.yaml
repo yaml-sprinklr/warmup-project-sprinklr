@@ -8,7 +8,7 @@ image:
   repository: order-service 
   pullPolicy: Never
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v8"
+  tag: "v9"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -21,7 +21,9 @@ serviceAccount:
   name: ""
 
 podAnnotations: {}
-podLabels: {}
+podLabels:
+  app: order-service
+  component: api
 podSecurityContext: {}
 securityContext: {}
 
@@ -85,3 +87,16 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
+
+# Outbox Worker Configuration
+outboxWorker:
+  enabled: true
+  replicaCount: 1
+  metricsPort: 8000
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

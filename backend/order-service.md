@@ -111,3 +111,21 @@ Harder to manage at scale
 5. KafkaNodePool
 6. tenacity
 remaining to implement -> metrics
+7. Problem: When you scale the API to multiple replicas, you get:
+2 replicas = 2 consumers + 2 processors competing
+Kafka consumer group helps with consumer (only 1 gets each message)
+But processor loops will all try to process orders (race conditions)
+
+```
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background tasks IN THE SAME PROCESS as FastAPI
+    consumer_task = asyncio.create_task(start_consumer(), name="kafka-consumer")
+    processor_task = asyncio.create_task(start_order_processor(), name="order-processor")
+```
+
+1. use redis for outbox pattern?
+2. leaving out nitty gritty of asyncio for now
+3. TODO: load test
+
+### Milestone 3

@@ -1,0 +1,579 @@
+{
+  "title": "Order Service Metrics",
+  "tags": [
+    "order-service",
+    "microservices",
+    "prometheus"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "Service Overview",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Request Rate (QPS)",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{service=\"order-service\"}[5m]))",
+          "legendFormat": "Total Requests/sec"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "reqps",
+          "label": "Requests/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate (%)",
+      "type": "graph",
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{service=\"order-service\",status_code=~\"4xx|5xx\"}[5m])) / sum(rate(http_requests_total{service=\"order-service\"}[5m])) * 100",
+          "legendFormat": "Error Rate %"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": "Error %"
+        },
+        {
+          "format": "short"
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 1,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        },
+        {
+          "value": 5,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        }
+      ]
+    },
+    {
+      "title": "Latency (P50, P95, P99)",
+      "type": "graph",
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{service=\"order-service\"}[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"order-service\"}[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{service=\"order-service\"}[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Latency"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Requests by Endpoint",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{service=\"order-service\"}[5m])) by (endpoint, method)",
+          "legendFormat": "{{method}} {{endpoint}}"
+        }
+      ]
+    },
+    {
+      "title": "Requests In Progress",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(http_requests_in_progress{service=\"order-service\"}) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "title": "Database & Infrastructure",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "DB Connection Pool",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "db_pool_in_use{service=\"order-service\"}",
+          "legendFormat": "In Use"
+        },
+        {
+          "expr": "db_pool_available{service=\"order-service\"}",
+          "legendFormat": "Available"
+        },
+        {
+          "expr": "db_pool_waiters{service=\"order-service\"}",
+          "legendFormat": "Waiters"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Connections"
+        },
+        {
+          "format": "short"
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 25,
+          "colorMode": "custom",
+          "op": "gt",
+          "fill": false,
+          "line": true,
+          "yaxis": "left"
+        }
+      ]
+    },
+    {
+      "title": "DB Query Duration (P95)",
+      "type": "graph",
+      "gridPos": {
+        "x": 8,
+        "y": 18,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{service=\"order-service\"}[5m])) by (operation, le))",
+          "legendFormat": "{{operation}}"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Query Time"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "DB Queries & Errors",
+      "type": "graph",
+      "gridPos": {
+        "x": 16,
+        "y": 18,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(db_queries_total{service=\"order-service\"}[5m])) by (operation)",
+          "legendFormat": "{{operation}}"
+        },
+        {
+          "expr": "sum(rate(db_query_errors_total{service=\"order-service\"}[5m])) by (error_type)",
+          "legendFormat": "Error: {{error_type}}"
+        }
+      ]
+    },
+    {
+      "title": "Redis Commands/sec",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(redis_commands_total{service=\"order-service\"}[5m])) by (command)",
+          "legendFormat": "{{command}}"
+        }
+      ]
+    },
+    {
+      "title": "Cache Hit Rate",
+      "type": "gauge",
+      "gridPos": {
+        "x": 8,
+        "y": 26,
+        "w": 4,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(cache_hits_total{service=\"order-service\"}[5m])) / (sum(rate(cache_hits_total{service=\"order-service\"}[5m])) + sum(rate(cache_misses_total{service=\"order-service\"}[5m]))) * 100",
+          "legendFormat": "Hit Rate %"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "red"
+              },
+              {
+                "value": 50,
+                "color": "yellow"
+              },
+              {
+                "value": 80,
+                "color": "green"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Redis Command Duration",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(redis_command_duration_seconds_bucket{service=\"order-service\"}[5m])) by (command, le))",
+          "legendFormat": "P95 {{command}}"
+        }
+      ]
+    },
+    {
+      "title": "Event System (Kafka & Outbox)",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Kafka Events Published",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_events_published_total{service=\"order-service\",status=\"success\"}[5m])) by (event_type)",
+          "legendFormat": "✓ {{event_type}}"
+        },
+        {
+          "expr": "sum(rate(kafka_events_published_total{service=\"order-service\",status=\"failure\"}[5m])) by (event_type)",
+          "legendFormat": "✗ {{event_type}}"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Events Consumed",
+      "type": "graph",
+      "gridPos": {
+        "x": 8,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_events_consumed_total{service=\"order-service\",status=\"success\"}[5m])) by (event_type)",
+          "legendFormat": "✓ {{event_type}}"
+        },
+        {
+          "expr": "sum(rate(kafka_events_consumed_total{service=\"order-service\",status=\"failure\"}[5m])) by (event_type)",
+          "legendFormat": "✗ {{event_type}}"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Consumer Lag",
+      "type": "graph",
+      "gridPos": {
+        "x": 16,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "kafka_consumer_lag_messages{service=\"order-service\"}",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Messages Behind"
+        },
+        {
+          "format": "short"
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 1000,
+          "colorMode": "custom",
+          "op": "gt",
+          "fill": false,
+          "line": true
+        },
+        {
+          "value": 10000,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        }
+      ]
+    },
+    {
+      "title": "Duplicate Events Detected",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(kafka_events_duplicate_total{service=\"order-service\"}[1h]))",
+          "legendFormat": "Duplicates/hour"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Outbox Events Pending",
+      "type": "graph",
+      "gridPos": {
+        "x": 6,
+        "y": 43,
+        "w": 9,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "outbox_events_pending{service=\"order-service\"}",
+          "legendFormat": "Pending Events"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Count"
+        },
+        {
+          "format": "short"
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 500,
+          "colorMode": "custom",
+          "op": "gt",
+          "fill": false,
+          "line": true
+        },
+        {
+          "value": 5000,
+          "colorMode": "critical",
+          "op": "gt",
+          "fill": true,
+          "line": true
+        }
+      ]
+    },
+    {
+      "title": "Outbox Processing Rate",
+      "type": "graph",
+      "gridPos": {
+        "x": 15,
+        "y": 43,
+        "w": 9,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(outbox_events_processed_total{service=\"order-service\",status=\"success\"}[5m]))",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "sum(rate(outbox_events_processed_total{service=\"order-service\",status=\"failure\"}[5m]))",
+          "legendFormat": "Failure"
+        }
+      ]
+    },
+    {
+      "title": "Background Tasks",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Background Tasks Running",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "background_tasks_running{service=\"order-service\"}",
+          "legendFormat": "{{task_name}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Background Task Errors",
+      "type": "graph",
+      "gridPos": {
+        "x": 8,
+        "y": 52,
+        "w": 16,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(background_task_errors_total{service=\"order-service\"}[5m])) by (task_name, error_type)",
+          "legendFormat": "{{task_name}}: {{error_type}}"
+        }
+      ]
+    }
+  ]
+}

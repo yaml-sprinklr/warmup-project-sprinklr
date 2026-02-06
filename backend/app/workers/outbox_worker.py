@@ -1,4 +1,4 @@
-"""
+"""  
 Outbox worker - separate process that publishes events from outbox to Kafka
 Runs as independent K8s deployment for reliability
 """
@@ -7,13 +7,22 @@ import asyncio
 import logging
 import signal
 import sys
+import time
 from datetime import datetime, UTC
 
-from sqlmodel import Session, select
+from prometheus_client import start_http_server
+from sqlmodel import Session, select, func
 
 from app.core.config import settings
 from app.core.db import engine
 from app.core.kafka import kafka_producer
+from app.core.metrics import (
+    registry,
+    outbox_events_pending,
+    outbox_events_processed_total,
+    outbox_publish_duration_seconds,
+    outbox_retry_attempts_total,
+)
 from app.models import OutboxEvent
 
 # Configure logging
@@ -49,6 +58,9 @@ async def process_outbox_events():
 
                 if published_count > 0:
                     logger.info(f"Published {published_count} events")
+                
+                # Update pending events gauge
+                update_pending_count()
 
                 await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL_SECONDS)
 
@@ -81,7 +93,7 @@ async def publish_pending_events(batch_size: int) -> int:
         statement = (
             select(OutboxEvent)
             .where(OutboxEvent.published == False)  # noqa: E712
-            .order_by(OutboxEvent.created_at)
+            .order_by(OutboxEvent.created_at.asc())  # type: ignore
             .limit(batch_size)
             .with_for_update(skip_locked=True)  # Skip locked rows
         )
@@ -89,6 +101,7 @@ async def publish_pending_events(batch_size: int) -> int:
         events = session.exec(statement).all()
 
         for event in events:
+            start_time = time.time()
             try:
                 if not kafka_producer.producer:
                     raise RuntimeError("Kafka producer not started")
@@ -110,6 +123,11 @@ async def publish_pending_events(batch_size: int) -> int:
                 session.commit()
 
                 published_count += 1
+                
+                # Track successful processing
+                duration = time.time() - start_time
+                outbox_events_processed_total.labels(status="success").inc()
+                outbox_publish_duration_seconds.observe(duration)
 
                 logger.debug(
                     f"Published event {event.event_id} to {event.topic} "
@@ -126,6 +144,10 @@ async def publish_pending_events(batch_size: int) -> int:
 
                 session.add(event)
                 session.commit()
+                
+                # Track failed processing and retries
+                outbox_events_processed_total.labels(status="failure").inc()
+                outbox_retry_attempts_total.labels(event_type=event.event_type).inc()
 
                 logger.error(
                     f"Failed to publish event {event.event_id} "
@@ -142,6 +164,21 @@ async def publish_pending_events(batch_size: int) -> int:
     return published_count
 
 
+def update_pending_count():
+    """
+    Update the outbox_events_pending gauge with current count
+    """
+    try:
+        with Session(engine) as session:
+            count_statement = select(func.count()).select_from(OutboxEvent).where(
+                OutboxEvent.published == False  # noqa: E712
+            )
+            pending_count = session.exec(count_statement).one()
+            outbox_events_pending.set(pending_count)
+    except Exception as e:
+        logger.error(f"Failed to update pending count metric: {e}")
+
+
 async def main():
     """Entry point for outbox worker"""
     # Register signal handlers
@@ -150,6 +187,13 @@ async def main():
 
     logger.info("Outbox worker starting up...")
 
+    # Start metrics server
+    metrics_port = 8000
+    if hasattr(settings, "METRICS_PORT"):
+        metrics_port = int(settings.METRICS_PORT)  # type: ignore
+    start_http_server(metrics_port, registry=registry)
+    logger.info(f"Metrics server started on port {metrics_port}")
+
     try:
         await process_outbox_events()
     except KeyboardInterrupt:
@@ -157,7 +201,6 @@ async def main():
     except Exception as e:
         logger.error(f"Fatal error in outbox worker: {e}", exc_info=True)
         sys.exit(1)
-
     logger.info("Outbox worker shutdown complete")
 
 

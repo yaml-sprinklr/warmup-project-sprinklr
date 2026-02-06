@@ -1,17 +1,20 @@
+{{- if .Values.outboxWorker.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rest-api.fullname" . }}
+  name: {{ include "rest-api.fullname" . }}-outbox-worker
   labels:
     {{- include "rest-api.labels" . | nindent 4 }}
     app: order-service
-    component: api
+    component: outbox-worker
 spec:
-  type: {{ .Values.service.type }}
+  type: ClusterIP
   ports:
-    - port: {{ .Values.service.port }}
+    - port: {{ .Values.outboxWorker.metricsPort }}
       targetPort: http
       protocol: TCP
       name: http
   selector:
     {{- include "rest-api.selectorLabels" . | nindent 4 }}
+    component: outbox-worker
+{{- end }}

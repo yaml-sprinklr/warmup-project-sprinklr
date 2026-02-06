@@ -1,0 +1,40 @@
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+
+    route:
+      group_by: ["alertname", "cluster", "service"]
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: "default"
+
+    receivers:
+      - name: "default"
+        # View alerts in Alertmanager UI: kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+        # Then open: http://localhost:9093
+
+# Grafana dashboard providers
+grafana:
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "order-service"
+          orgId: 1
+          folder: "Order Service"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /tmp/dashboards
+
+  # Sidecar to auto-import dashboards from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      folder: /tmp/dashboards
+      provider:
+        foldersFromFilesStructure: true
