@@ -23,13 +23,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Worker configuration constants
-BATCH_SIZE = 100  # Maximum events to process per batch
-POLL_INTERVAL_SECONDS = 1  # How often to check for new events
-ERROR_BACKOFF_SECONDS = 5  # Sleep duration after errors
-MAX_RETRY_ATTEMPTS = 5  # Max attempts before flagging for manual intervention
-ERROR_MESSAGE_MAX_LENGTH = 500  # Max characters to store in last_error field
-
 # Global flag for graceful shutdown
 shutdown_flag = False
 
@@ -52,16 +45,16 @@ async def process_outbox_events():
     try:
         while not shutdown_flag:
             try:
-                published_count = await publish_pending_events(BATCH_SIZE)
+                published_count = await publish_pending_events(settings.OUTBOX_BATCH_SIZE)
 
                 if published_count > 0:
                     logger.info(f"Published {published_count} events")
 
-                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL_SECONDS)
 
             except Exception as e:
                 logger.error(f"Error in outbox processing: {e}", exc_info=True)
-                await asyncio.sleep(ERROR_BACKOFF_SECONDS)
+                await asyncio.sleep(settings.OUTBOX_ERROR_BACKOFF_SECONDS)
 
     except asyncio.CancelledError:
         logger.info("Outbox worker cancelled")
@@ -128,7 +121,7 @@ async def publish_pending_events(batch_size: int) -> int:
 
                 # Update failure tracking
                 event.attempts += 1
-                event.last_error = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
+                event.last_error = str(e)[:settings.OUTBOX_ERROR_MESSAGE_MAX_LENGTH]
                 event.updated_at = datetime.now(UTC)
 
                 session.add(event)
@@ -140,7 +133,7 @@ async def publish_pending_events(batch_size: int) -> int:
                 )
 
                 # TODO: Move to dead letter queue after max attempts
-                if event.attempts >= MAX_RETRY_ATTEMPTS:
+                if event.attempts >= settings.OUTBOX_MAX_RETRY_ATTEMPTS:
                     logger.critical(
                         f"Event {event.event_id} failed {event.attempts} times, "
                         "needs manual intervention"

@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     MOCK_USER_DELETE_INTERVAL: int = 30  # Delete user every N seconds
     MOCK_USER_MAX_USERS: int = 50  # Maximum active users
 
+    # Outbox Worker Configuration
+    OUTBOX_BATCH_SIZE: int = 100  # Maximum events to process per batch
+    OUTBOX_POLL_INTERVAL_SECONDS: int = 1  # How often to check for new events
+    OUTBOX_ERROR_BACKOFF_SECONDS: int = 5  # Sleep duration after errors
+    OUTBOX_MAX_RETRY_ATTEMPTS: int = 5  # Max attempts before flagging for manual intervention
+    OUTBOX_ERROR_MESSAGE_MAX_LENGTH: int = 500  # Max characters to store in last_error field
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
