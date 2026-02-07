@@ -159,6 +159,10 @@ resource "kubernetes_manifest" "elasticsearch_cluster" {
 resource "kubernetes_manifest" "kibana_instance" {
   count = var.deploy_logging_stack ? 1 : 0
 
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "kibana.k8s.elastic.co/v1"
     kind       = "Kibana"
