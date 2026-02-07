@@ -29,10 +29,15 @@ from typing import Optional
 # Learning: When you await or create_task(), Python automatically copies the
 # context to the child task. This is how trace_id "follows" the request through
 # all async operations.
+#
+# Using ECS (Elastic Common Schema) field names with dot notation for better
+# compatibility with Elasticsearch and other observability tools.
 
-trace_id_var: ContextVar[Optional[str]] = ContextVar("trace_id", default=None)
-span_id_var: ContextVar[Optional[str]] = ContextVar("span_id", default=None)
-parent_span_id_var: ContextVar[Optional[str]] = ContextVar("parent_span_id", default=None)
+trace_id_var: ContextVar[Optional[str]] = ContextVar("trace.id", default=None)
+span_id_var: ContextVar[Optional[str]] = ContextVar("span.id", default=None)
+parent_span_id_var: ContextVar[Optional[str]] = ContextVar(
+    "parent_span_id", default=None
+)
 
 
 @dataclass
@@ -115,7 +120,10 @@ class TraceContext:
                 return None
 
             # Validate span_id length and format
-            if len(parent_span_id_from_header) != 16 or parent_span_id_from_header == "0" * 16:
+            if (
+                len(parent_span_id_from_header) != 16
+                or parent_span_id_from_header == "0" * 16
+            ):
                 return None
 
             # Check if hex
@@ -358,7 +366,7 @@ def extract_trace_context_from_kafka_headers(
 
     Usage:
         for message in consumer:
-            context = extract_trace_context_from_kafka_headers(message.headers())
+            context = extract_trace_context_from_kafka_headers(message.headers)
             if context:
                 set_trace_context(context)
             process_message(message)

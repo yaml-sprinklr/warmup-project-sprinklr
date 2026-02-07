@@ -100,7 +100,7 @@ class OutboxService:
         session.add(outbox_event)
         # Note: Do NOT commit here - let the caller commit atomically with business logic
 
-        logger.debug(
+        logger.info(
             "outbox_event_created",
             event_id=event_id,
             event_type=event_type,

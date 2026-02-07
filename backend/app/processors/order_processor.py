@@ -17,7 +17,11 @@ import structlog
 from app.core.config import settings
 from app.core.db import engine
 from app.core.logging import get_logger
-from app.core.tracing import create_trace_context, set_trace_context, clear_trace_context
+from app.core.tracing import (
+    create_trace_context,
+    set_trace_context,
+    clear_trace_context,
+)
 from app.models import Order, OrderStatus, OutboxEvent
 from app.services import OutboxService
 from app.events import OrderConfirmedData, OrderShippedData
@@ -43,7 +47,7 @@ async def start_order_processor():
                     "order_processor_error",
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    exc_info=True
+                    exc_info=True,
                 )
                 await asyncio.sleep(5)  # Backoff on errors
 
@@ -81,11 +85,16 @@ async def process_pending_orders():
                 # Step 1: Find the original outbox event to extract trace context
                 # Learning: We query for order.created event because it has the
                 # trace_id from the original HTTP request that created this order
-                original_event_stmt = select(OutboxEvent).where(
-                    OutboxEvent.event_type == "order.created",
-                    OutboxEvent.partition_key == order.user_id,
-                    OutboxEvent.payload["data"]["order_id"].astext == str(order.id)
-                ).limit(1)
+                original_event_stmt = (
+                    select(OutboxEvent)
+                    .where(
+                        OutboxEvent.event_type == "order.created",
+                        OutboxEvent.partition_key == order.user_id,
+                        OutboxEvent.payload["data"]["order_id"].as_string()
+                        == str(order.id),
+                    )
+                    .limit(1)
+                )
 
                 original_event = session.exec(original_event_stmt).first()
 
@@ -98,8 +107,8 @@ async def process_pending_orders():
                     )
                     set_trace_context(trace_context)
                     structlog.contextvars.bind_contextvars(
-                        trace_id=trace_context.trace_id,
-                        span_id=trace_context.span_id,
+                        **{"trace.id": trace_context.trace_id},
+                        **{"span.id": trace_context.span_id},
                         parent_span_id=trace_context.parent_span_id,
                     )
                 else:
@@ -107,8 +116,8 @@ async def process_pending_orders():
                     trace_context = create_trace_context()
                     set_trace_context(trace_context)
                     structlog.contextvars.bind_contextvars(
-                        trace_id=trace_context.trace_id,
-                        span_id=trace_context.span_id,
+                        **{"trace.id": trace_context.trace_id},
+                        **{"span.id": trace_context.span_id},
                     )
 
                 # Generate payment details
@@ -159,7 +168,7 @@ async def process_pending_orders():
                     order_id=str(order.id),
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    exc_info=True
+                    exc_info=True,
                 )
             finally:
                 # Clean up trace context for next iteration
@@ -192,11 +201,16 @@ async def process_confirmed_orders():
         for order in orders:
             try:
                 # Reconstruct trace context from original event
-                original_event_stmt = select(OutboxEvent).where(
-                    OutboxEvent.event_type == "order.created",
-                    OutboxEvent.partition_key == order.user_id,
-                    OutboxEvent.payload["data"]["order_id"].astext == str(order.id)
-                ).limit(1)
+                original_event_stmt = (
+                    select(OutboxEvent)
+                    .where(
+                        OutboxEvent.event_type == "order.created",
+                        OutboxEvent.partition_key == order.user_id,
+                        OutboxEvent.payload["data"]["order_id"].as_string()
+                        == str(order.id),
+                    )
+                    .limit(1)
+                )
 
                 original_event = session.exec(original_event_stmt).first()
 
@@ -207,16 +221,16 @@ async def process_confirmed_orders():
                     )
                     set_trace_context(trace_context)
                     structlog.contextvars.bind_contextvars(
-                        trace_id=trace_context.trace_id,
-                        span_id=trace_context.span_id,
+                        **{"trace.id": trace_context.trace_id},
+                        **{"span.id": trace_context.span_id},
                         parent_span_id=trace_context.parent_span_id,
                     )
                 else:
                     trace_context = create_trace_context()
                     set_trace_context(trace_context)
                     structlog.contextvars.bind_contextvars(
-                        trace_id=trace_context.trace_id,
-                        span_id=trace_context.span_id,
+                        **{"trace.id": trace_context.trace_id},
+                        **{"span.id": trace_context.span_id},
                     )
 
                 # Generate shipping details
@@ -269,7 +283,7 @@ async def process_confirmed_orders():
                     order_id=str(order.id),
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    exc_info=True
+                    exc_info=True,
                 )
             finally:
                 clear_trace_context()

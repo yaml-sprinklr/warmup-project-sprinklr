@@ -9,10 +9,20 @@ from app.core.redis import redis_client
 from app.core.kafka import kafka_consumer, kafka_producer
 from app.core.db import engine
 from app.core.logging import get_logger
-from app.core.tracing import extract_trace_context_from_kafka_headers, set_trace_context, clear_trace_context
+from app.core.tracing import (
+    extract_trace_context_from_kafka_headers,
+    set_trace_context,
+    clear_trace_context,
+    get_trace_context,
+)
 from app.core.metrics import kafka_events_consumed_total, kafka_events_duplicate_total
 from app.models import Order, OrderStatus
-from app.events import UserCreatedData, UserUpdatedData, UserDeletedData, OrderCancelledData
+from app.events import (
+    UserCreatedData,
+    UserUpdatedData,
+    UserDeletedData,
+    OrderCancelledData,
+)
 
 logger = get_logger(__name__)
 
@@ -36,7 +46,7 @@ async def start_consumer():
             "user_consumer_crashed",
             error_type=type(e).__name__,
             error_message=str(e),
-            exc_info=True
+            exc_info=True,
         )
         raise
 
@@ -56,14 +66,14 @@ async def handle_message(message):
     # Step 1: Extract trace context from Kafka message headers
     # Learning: The producer (outbox worker) injected traceparent header.
     # We extract it to continue the distributed trace.
-    trace_context = extract_trace_context_from_kafka_headers(message.headers())
+    trace_context = extract_trace_context_from_kafka_headers(message.headers)
 
     if trace_context:
         # Set trace context so all logs and subsequent operations include trace_id
         set_trace_context(trace_context)
         structlog.contextvars.bind_contextvars(
-            trace_id=trace_context.trace_id,
-            span_id=trace_context.span_id,
+            **{"trace.id": trace_context.trace_id},
+            **{"span.id": trace_context.span_id},
             parent_span_id=trace_context.parent_span_id,
         )
 
@@ -79,8 +89,7 @@ async def handle_message(message):
 
             # Track duplicate
             kafka_events_duplicate_total.labels(
-                topic=message.topic,
-                event_type=event_type
+                topic=message.topic, event_type=event_type
             ).inc()
 
             await kafka_consumer.commit()
@@ -104,12 +113,10 @@ async def handle_message(message):
 
         # Track successful consumption
         kafka_events_consumed_total.labels(
-            topic=message.topic,
-            event_type=event_type,
-            status="success"
+            topic=message.topic, event_type=event_type, status="success"
         ).inc()
 
-        logger.debug(
+        logger.info(
             "kafka_event_processed",
             event_id=event_id,
             event_type=event_type,
@@ -123,14 +130,12 @@ async def handle_message(message):
             event_type=event_type,
             error_type=type(e).__name__,
             error_message=str(e),
-            exc_info=True
+            exc_info=True,
         )
 
         # Track failed consumption
         kafka_events_consumed_total.labels(
-            topic=message.topic,
-            event_type=event_type,
-            status="failure"
+            topic=message.topic, event_type=event_type, status="failure"
         ).inc()
 
         # Don't commit - will retry
@@ -149,7 +154,7 @@ async def handle_user_created(event):
     await redis_client.set_json(
         f"user:{event_data.user_id}",
         event_data.model_dump(mode="json"),
-        ttl=settings.USER_CACHE_TTL
+        ttl=settings.USER_CACHE_TTL,
     )
     logger.info("user_cached", user_id=event_data.user_id, email=event_data.email)
 
@@ -163,7 +168,7 @@ async def handle_user_updated(event):
     await redis_client.set_json(
         f"user:{event_data.user_id}",
         event_data.model_dump(mode="json"),
-        ttl=settings.USER_CACHE_TTL
+        ttl=settings.USER_CACHE_TTL,
     )
     logger.info("user_cache_updated", user_id=event_data.user_id)
 
@@ -198,11 +203,15 @@ async def handle_user_deleted(event):
                 )
 
                 # Publish event FIRST (before DB commit)
+                # Get current trace context to propagate through the event chain
+                trace_context = get_trace_context()
+
                 await kafka_producer.publish_event(
                     topic=settings.KAFKA_TOPIC_ORDER_CANCELLED,
                     event_type="order.cancelled",
                     data=cancel_data.model_dump(mode="json"),
                     key=event_data.user_id,
+                    trace_context=trace_context,
                 )
 
                 # Then update DB

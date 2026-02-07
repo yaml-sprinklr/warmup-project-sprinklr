@@ -120,7 +120,7 @@ filebeat-xxxxx   1/1     Running   0          2m
 
 ### Get Elasticsearch Password
 ```bash
-kubectl get secret order-service-es-elastic-user -n elastic-system -o=jsonpath='{.data.elastic}' | base64 --decode && echo
+kubectl get secret order-service-es-es-elastic-user -n elastic-system -o=jsonpath='{.data.elastic}' | base64 --decode && echo
 ```
 
 **Save this password!** You'll need it to log into Kibana.

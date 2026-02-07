@@ -32,19 +32,21 @@ resource "kubernetes_job_v1" "filebeat_setup" {
             "setup",
             "--index-management", # Create index pattern
             "--dashboards",       # Load dashboards (if available)
-            "-E", "output.elasticsearch.hosts=['order-service-es-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200']",
+            "-E", "output.elasticsearch.hosts=['https://order-service-es-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200']",
             "-E", "output.elasticsearch.username=elastic",
             "-E", "output.elasticsearch.password=$(ELASTICSEARCH_PASSWORD)",
             "-E", "output.elasticsearch.ssl.enabled=true",
             "-E", "output.elasticsearch.ssl.verification_mode=none",
-            "-E", "setup.kibana.host=order-service-kibana-kb-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:5601"
+            "-E", "setup.kibana.host=https://order-service-kibana-kb-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:5601",
+            "-E", "setup.kibana.ssl.enabled=true",
+            "-E", "setup.kibana.ssl.verification_mode=none"
           ]
 
           env {
             name = "ELASTICSEARCH_PASSWORD"
             value_from {
               secret_key_ref {
-                name = "order-service-es-elastic-user"
+                name = "order-service-es-es-elastic-user"
                 key  = "elastic"
               }
             }
@@ -64,12 +66,19 @@ resource "kubernetes_job_v1" "filebeat_setup" {
       }
     }
 
-    backoff_limit = 3
+    backoff_limit              = 3
     ttl_seconds_after_finished = 300 # Clean up job after 5 minutes
+    completion_mode            = "NonIndexed"
+  }
+
+  wait_for_completion = true
+  timeouts {
+    create = "5m"  # Job takes ~80s; 5m gives safe margin
   }
 
   depends_on = [
+    kubernetes_secret_v1.elasticsearch_user_copy,
     kubernetes_manifest.elasticsearch_cluster,
-    kubernetes_manifest.kibana_instance
+    terraform_data.kibana_instance
   ]
 }

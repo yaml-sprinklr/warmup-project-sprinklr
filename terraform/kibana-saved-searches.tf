@@ -15,11 +15,11 @@ resource "kubernetes_config_map" "kibana_saved_search_errors" {
 
   data = {
     "errors-last-1h.ndjson" = <<-EOT
-      {"attributes":{"title":"All ERROR logs (last 1h)","description":"Quick overview of all errors in the last hour","hits":0,"columns":["timestamp","message","trace_id","error_type","error_message","service_name"],"sort":[["timestamp","desc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"level:ERROR\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
+      {"attributes":{"title":"All ERROR logs (last 1h)","description":"Quick overview of all errors in the last hour","hits":0,"columns":["timestamp","message","trace.id","error_type","error_message","service_name"],"sort":[["timestamp","desc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"level:ERROR\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
     EOT
   }
 
-  depends_on = [kubernetes_manifest.kibana_instance]
+  depends_on = [terraform_data.kibana_instance]
 }
 
 # Saved Search 2: Slow requests
@@ -36,11 +36,11 @@ resource "kubernetes_config_map" "kibana_saved_search_slow_requests" {
 
   data = {
     "slow-requests.ndjson" = <<-EOT
-      {"attributes":{"title":"Slow requests (>1000ms)","description":"Find requests taking longer than 1 second","hits":0,"columns":["timestamp","http_method","http_path","duration_ms","http_status_code","trace_id"],"sort":[["duration_ms","desc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"duration_ms:>1000\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
+      {"attributes":{"title":"Slow requests (>1000ms)","description":"Find requests taking longer than 1 second","hits":0,"columns":["timestamp","http.request.method","url.path","duration_ms","http.response.status_code","trace.id"],"sort":[["duration_ms","desc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"duration_ms:>1000\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
     EOT
   }
 
-  depends_on = [kubernetes_manifest.kibana_instance]
+  depends_on = [terraform_data.kibana_instance]
 }
 
 # Saved Search 3: Trace ID lookup template
@@ -57,11 +57,11 @@ resource "kubernetes_config_map" "kibana_saved_search_trace_lookup" {
 
   data = {
     "trace-lookup.ndjson" = <<-EOT
-      {"attributes":{"title":"Trace ID lookup","description":"Template for looking up all logs for a specific trace_id. Replace the trace_id value with your actual trace ID.","hits":0,"columns":["timestamp","service_name","message","span_id","parent_span_id","http_method","http_path","order_id","user_id"],"sort":[["timestamp","asc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"trace_id:\\\"REPLACE_WITH_ACTUAL_TRACE_ID\\\"\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
+      {"attributes":{"title":"Trace ID lookup","description":"Template for looking up all logs for a specific trace.id. Replace the trace.id value with your actual trace ID.","hits":0,"columns":["timestamp","service_name","message","span.id","parent_span_id","http.request.method","url.path","order_id","user_id"],"sort":[["timestamp","asc"]],"version":1,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"trace.id:\\\"REPLACE_WITH_ACTUAL_TRACE_ID\\\"\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"order-service-*"}],"migrationVersion":{"search":"7.9.3"},"type":"search"}
     EOT
   }
 
-  depends_on = [kubernetes_manifest.kibana_instance]
+  depends_on = [terraform_data.kibana_instance]
 }
 
 # Note: These ConfigMaps contain the saved search definitions

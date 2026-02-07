@@ -8,7 +8,7 @@ image:
   repository: order-service
   pullPolicy: Never
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v11"
+  tag: "v15"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -113,4 +113,4 @@ filebeat:
     host: "order-service-es-es-http.elastic-system.svc.cluster.local"
     port: 9200
     username: "elastic"
-    passwordSecret: "order-service-es-elastic-user"  # Created by ECK operator
+    passwordSecret: "order-service-es-es-elastic-user"  # Created by ECK operator

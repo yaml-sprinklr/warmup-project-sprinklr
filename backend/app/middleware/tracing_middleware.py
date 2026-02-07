@@ -98,9 +98,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
                 trace_context = parsed_context
                 logger.debug(
                     "trace_context_extracted",
-                    trace_id=trace_context.trace_id,
+                    **{"trace.id": trace_context.trace_id},
                     parent_span_id=trace_context.parent_span_id,
-                    span_id=trace_context.span_id,
+                    **{"span.id": trace_context.span_id},
                 )
             else:
                 # Malformed header, start new trace
@@ -108,7 +108,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
                 logger.warning(
                     "trace_context_invalid_header",
                     traceparent=traceparent_header,
-                    new_trace_id=trace_context.trace_id,
+                    **{"trace.id": trace_context.trace_id},
                 )
         else:
             # No traceparent header, start new trace
@@ -120,8 +120,8 @@ class TracingMiddleware(BaseHTTPMiddleware):
             trace_context = create_trace_context()
             logger.debug(
                 "trace_context_generated",
-                trace_id=trace_context.trace_id,
-                span_id=trace_context.span_id,
+                **{"trace.id": trace_context.trace_id},
+                **{"span.id": trace_context.span_id},
             )
 
         # Step 2: Generate Request ID
@@ -152,9 +152,10 @@ class TracingMiddleware(BaseHTTPMiddleware):
         #
         # Learning: bind_contextvars() adds data to the context that persists
         # for all log calls. We don't need to pass trace_id to every logger.info()!
+        # Using ECS (Elastic Common Schema) field names for Elasticsearch compatibility
         structlog.contextvars.bind_contextvars(
-            trace_id=trace_context.trace_id,
-            span_id=trace_context.span_id,
+            **{"trace.id": trace_context.trace_id},
+            **{"span.id": trace_context.span_id},
             parent_span_id=trace_context.parent_span_id,
             request_id=request_id,
         )

@@ -116,6 +116,19 @@ def configure_logging() -> None:
         level=getattr(logging, settings.LOG_LEVEL.upper()),
     )
 
+    # Disable uvicorn access logs (plain text, redundant with LoggingMiddleware)
+    # Learning: uvicorn has its own access logger that outputs unstructured lines like:
+    #   INFO 10.42.0.1:48500 - "GET /api/v1/health/live HTTP/1.1" 200
+    # Our LoggingMiddleware already logs HTTP requests as structured JSON with
+    # trace_id, duration_ms, etc. — so these are just noise.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    # Silence aiokafka's verbose consumer group logs
+    # Learning: aiokafka logs every rebalance, partition assignment, and heartbeat
+    # in plain text format. This clutters structured logs. We only want errors.
+    logging.getLogger("aiokafka").setLevel(logging.WARNING)
+    logging.getLogger("aiokafka.consumer.group_coordinator").setLevel(logging.WARNING)
+
     # Step 2: Define the Processor Pipeline
     # ======================================
     # Each processor transforms the log event_dict in sequence.
@@ -126,26 +139,20 @@ def configure_logging() -> None:
         # Learning: contextvars.ContextVar values are automatically included
         # without manual passing through function calls
         structlog.contextvars.merge_contextvars,
-
         # Add service metadata (service_name, environment, version)
         add_service_context,
-
         # Add timestamp in ISO 8601 format with UTC timezone
         # Learning: ISO 8601 is the standard for distributed systems because it's
         # unambiguous and sortable. "2025-02-07T14:23:45.123456Z"
         structlog.processors.TimeStamper(fmt="iso", utc=True),
-
         # Add log level (INFO, ERROR, etc.)
         add_log_level,
-
         # If an exception is logged, format the traceback
         # Learning: This captures the full stack trace and includes it in the
         # log output as 'exception' field
         structlog.processors.format_exc_info,
-
         # Rename 'event' key to 'message' for ELK compatibility
         rename_event_key,
-
         # Remove ANSI color codes if present (from console renderer)
         drop_color_message_key,
     ]
@@ -194,15 +201,12 @@ def configure_logging() -> None:
     structlog.configure(
         # Processor pipeline: shared processors + renderer
         processors=shared_processors + [renderer],
-
         # Use Python's logging module as the final output destination
         # Learning: structlog generates the log entry, logging module writes to stdout
         logger_factory=structlog.stdlib.LoggerFactory(),
-
         # Cache logger instances for performance
         # Learning: Logger creation has overhead. Caching means we create once per module.
         cache_logger_on_first_use=True,
-
         # Wrapper class for the logger
         # Learning: BoundLogger supports method chaining like logger.bind(user_id=123)
         wrapper_class=structlog.stdlib.BoundLogger,

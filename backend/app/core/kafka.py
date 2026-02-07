@@ -56,16 +56,22 @@ class KafkaProducerClient:
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10)
     )
     async def publish_event(
-        self, topic: str, event_type: str, data: dict[str, Any], key: str | None = None
+        self,
+        topic: str,
+        event_type: str,
+        data: dict[str, Any],
+        key: str | None = None,
+        trace_context: Any = None,
     ) -> str:
         """
-        Publish event to Kafka topic
+        Publish event to Kafka topic with optional trace context
 
         Args:
             topic: Kafka topic name
             event_type: Type of event (e.g., "order.created")
             data: Event payload
             key: Partition key (usually user_id)
+            trace_context: Optional TraceContext for distributed tracing
 
         Returns:
             event_id: Unique event ID
@@ -82,11 +88,19 @@ class KafkaProducerClient:
             "data": data,
         }
 
+        # Prepare headers with trace context if provided
+        headers = []
+        if trace_context:
+            traceparent = trace_context.to_traceparent_header()
+            headers.append(("traceparent", traceparent.encode("utf-8")))
+
         start_time = time.time()
         try:
-            await self.producer.send_and_wait(topic, value=event, key=key)
+            await self.producer.send_and_wait(
+                topic, value=event, key=key, headers=headers if headers else None
+            )
             duration = time.time() - start_time
-            
+
             # Track successful publish
             kafka_events_published_total.labels(
                 topic=topic, event_type=event_type, status="success"
@@ -94,7 +108,7 @@ class KafkaProducerClient:
             kafka_publish_duration_seconds.labels(
                 topic=topic, event_type=event_type
             ).observe(duration)
-            
+
             logger.info(f"Published {event_type} to {topic} (event_id={event_id})")
             return event_id
         except KafkaError as e:
@@ -129,10 +143,10 @@ class KafkaConsumerClient:
                 max_poll_interval_ms=300000,  # 5 minutes
             )
             await self.consumer.start()
-            
+
             # Start lag tracking background task
             self._lag_task = asyncio.create_task(self._track_consumer_lag())
-            
+
             logger.info(f"Kafka consumer started for topics: {self.topics}")
         except Exception as e:
             logger.error(f"Failed to start Kafka consumer: {e}")
@@ -146,7 +160,7 @@ class KafkaConsumerClient:
                 await self._lag_task
             except asyncio.CancelledError:
                 pass
-        
+
         if self.consumer:
             await self.consumer.stop()
             logger.info("Kafka consumer stopped")
@@ -163,7 +177,7 @@ class KafkaConsumerClient:
         """Commit current offset"""
         if self.consumer:
             await self.consumer.commit()
-    
+
     async def _track_consumer_lag(self):
         """Background task to track consumer lag"""
         while True:
@@ -171,28 +185,28 @@ class KafkaConsumerClient:
                 if self.consumer:
                     # Get assigned partitions
                     assigned = self.consumer.assignment()
-                    
+
                     for tp in assigned:
                         try:
                             # Get current position (committed offset)
                             committed = await self.consumer.committed(tp)
                             if committed is None:
                                 committed = 0
-                            
+
                             # Get high water mark (latest offset)
                             highwater = await self.consumer.highwater(tp)
-                            
+
                             # Calculate lag
                             lag = highwater - committed
-                            
+
                             # Update metric
                             kafka_consumer_lag_messages.labels(
                                 topic=tp.topic,
-                                consumer_group=settings.KAFKA_CONSUMER_GROUP_ID
+                                consumer_group=settings.KAFKA_CONSUMER_GROUP_ID,
                             ).set(lag)
                         except Exception as e:
                             logger.debug(f"Error tracking lag for {tp}: {e}")
-                
+
                 # Update every 30 seconds
                 await asyncio.sleep(30)
             except asyncio.CancelledError:

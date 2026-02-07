@@ -1,3 +1,89 @@
+# Data source to read Elasticsearch secret from elastic-system namespace
+data "kubernetes_secret_v1" "elasticsearch_user" {
+  count = var.deploy_logging_stack ? 1 : 0
+
+  metadata {
+    name      = "order-service-es-es-elastic-user"
+    namespace = "elastic-system"
+  }
+
+  depends_on = [kubernetes_manifest.elasticsearch_cluster]
+}
+
+# Copy Elasticsearch secret to order-service namespace
+# Filebeat needs access to Elasticsearch credentials
+resource "kubernetes_secret_v1" "elasticsearch_user_copy" {
+  count = var.deploy_logging_stack ? 1 : 0
+
+  metadata {
+    name      = "order-service-es-es-elastic-user"
+    namespace = var.namespace
+    labels = {
+      app = "filebeat"
+    }
+  }
+
+  data = data.kubernetes_secret_v1.elasticsearch_user[0].data
+  type = "Opaque"
+
+  depends_on = [data.kubernetes_secret_v1.elasticsearch_user]
+}
+
+# Filebeat ServiceAccount
+resource "kubernetes_service_account" "filebeat" {
+  count = var.deploy_logging_stack ? 1 : 0
+
+  metadata {
+    name      = "filebeat"
+    namespace = var.namespace
+    labels = {
+      app = "filebeat"
+    }
+  }
+}
+
+# Filebeat ClusterRole for Kubernetes metadata enrichment
+resource "kubernetes_cluster_role" "filebeat" {
+  count = var.deploy_logging_stack ? 1 : 0
+
+  metadata {
+    name = "filebeat"
+    labels = {
+      app = "filebeat"
+    }
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods", "namespaces", "nodes"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+# Bind Filebeat ServiceAccount to ClusterRole
+resource "kubernetes_cluster_role_binding" "filebeat" {
+  count = var.deploy_logging_stack ? 1 : 0
+
+  metadata {
+    name = "filebeat"
+    labels = {
+      app = "filebeat"
+    }
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.filebeat[0].metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.filebeat[0].metadata[0].name
+    namespace = var.namespace
+  }
+}
+
 # Filebeat ConfigMap
 # Collects logs from all pods and ships to Elasticsearch
 resource "kubernetes_config_map" "filebeat_config" {
@@ -18,14 +104,11 @@ resource "kubernetes_config_map" "filebeat_config" {
       - type: filestream
         id: ${var.app_name}-logs
         paths:
-          - /var/log/pods/${var.namespace}_*${var.app_name}*/*/*.log
+          - /var/log/pods/${var.namespace}_*/*/*.log
 
-        # Parse JSON logs
+        # Parse container logs (CRI format), then decode JSON if present
         parsers:
-          - ndjson:
-              keys_under_root: true
-              add_error_key: true
-              overwrite_keys: true
+          - container: ~
 
         # Add Kubernetes metadata
         processors:
@@ -34,6 +117,16 @@ resource "kubernetes_config_map" "filebeat_config" {
               matchers:
               - logs_path:
                   logs_path: "/var/log/pods/"
+
+          # Decode JSON only when the message looks like JSON
+          - decode_json_fields:
+              fields: ["message"]
+              target: ""
+              overwrite_keys: true
+              add_error_key: true
+              when:
+                regexp:
+                  message: '^\{'
 
           # Drop Filebeat's own logs
           - drop_event:
@@ -46,7 +139,7 @@ resource "kubernetes_config_map" "filebeat_config" {
 
       # Elasticsearch output
       output.elasticsearch:
-        hosts: ["order-service-es-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200"]
+        hosts: ["https://order-service-es-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200"]
         index: "order-service-%%{+yyyy.MM.dd}"
         username: "elastic"
         password: "$${ELASTICSEARCH_PASSWORD}"
@@ -58,6 +151,12 @@ resource "kubernetes_config_map" "filebeat_config" {
           rollover_alias: "order-service"
           pattern: "{now/d}-000001"
           policy_name: "order-service-logs"
+
+      # Setup template configuration (required for custom index)
+      setup.template.name: "order-service"
+      setup.template.pattern: "order-service-*"
+      setup.template.enabled: true
+      setup.template.overwrite: false
 
       logging:
         level: info
@@ -105,7 +204,7 @@ resource "kubernetes_daemonset" "filebeat" {
       }
 
       spec {
-        service_account_name            = "default"
+        service_account_name            = kubernetes_service_account.filebeat[0].metadata[0].name
         termination_grace_period_seconds = 30
         host_network                     = true
         dns_policy                       = "ClusterFirstWithHostNet"
@@ -124,7 +223,7 @@ resource "kubernetes_daemonset" "filebeat" {
             name  = "ELASTICSEARCH_PASSWORD"
             value_from {
               secret_key_ref {
-                name = "order-service-es-elastic-user"
+                name = "order-service-es-es-elastic-user"
                 key  = "elastic"
               }
             }
@@ -241,6 +340,9 @@ resource "kubernetes_daemonset" "filebeat" {
 
   depends_on = [
     kubernetes_config_map.filebeat_config,
-    kubernetes_manifest.elasticsearch_cluster
+    kubernetes_secret_v1.elasticsearch_user_copy,
+    kubernetes_manifest.elasticsearch_cluster,
+    kubernetes_service_account.filebeat,
+    kubernetes_cluster_role_binding.filebeat
   ]
 }

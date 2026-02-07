@@ -56,7 +56,9 @@ async def process_outbox_events():
     try:
         while not shutdown_flag:
             try:
-                published_count = await publish_pending_events(settings.OUTBOX_BATCH_SIZE)
+                published_count = await publish_pending_events(
+                    settings.OUTBOX_BATCH_SIZE
+                )
 
                 if published_count > 0:
                     logger.info("outbox_events_published", count=published_count)
@@ -71,7 +73,7 @@ async def process_outbox_events():
                     "outbox_processing_error",
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    exc_info=True
+                    exc_info=True,
                 )
                 await asyncio.sleep(settings.OUTBOX_ERROR_BACKOFF_SECONDS)
 
@@ -131,8 +133,8 @@ async def publish_pending_events(batch_size: int) -> int:
 
                 # Bind to structlog so logs include trace_id
                 structlog.contextvars.bind_contextvars(
-                    trace_id=trace_context.trace_id,
-                    span_id=trace_context.span_id,
+                    **{"trace.id": trace_context.trace_id},
+                    **{"span.id": trace_context.span_id},
                     parent_span_id=trace_context.parent_span_id,
                 )
 
@@ -173,7 +175,7 @@ async def publish_pending_events(batch_size: int) -> int:
                 outbox_events_processed_total.labels(status="success").inc()
                 outbox_publish_duration_seconds.observe(duration)
 
-                logger.debug(
+                logger.info(
                     "outbox_event_published",
                     event_id=event.event_id,
                     event_type=event.event_type,
@@ -186,7 +188,7 @@ async def publish_pending_events(batch_size: int) -> int:
 
                 # Update failure tracking
                 event.attempts += 1
-                event.last_error = str(e)[:settings.OUTBOX_ERROR_MESSAGE_MAX_LENGTH]
+                event.last_error = str(e)[: settings.OUTBOX_ERROR_MESSAGE_MAX_LENGTH]
                 event.updated_at = datetime.now(UTC)
 
                 session.add(event)
@@ -226,8 +228,12 @@ def update_pending_count():
     """
     try:
         with Session(engine) as session:
-            count_statement = select(func.count()).select_from(OutboxEvent).where(
-                OutboxEvent.published == False  # noqa: E712
+            count_statement = (
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(
+                    OutboxEvent.published == False  # noqa: E712
+                )
             )
             pending_count = session.exec(count_statement).one()
             outbox_events_pending.set(pending_count)
@@ -241,9 +247,11 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    logger.info("outbox_worker_main_starting",
-               service=settings.SERVICE_NAME,
-               environment=settings.ENVIRONMENT)
+    logger.info(
+        "outbox_worker_main_starting",
+        service=settings.SERVICE_NAME,
+        environment=settings.ENVIRONMENT,
+    )
 
     # Start metrics server
     metrics_port = 8000
@@ -261,7 +269,7 @@ async def main():
             "outbox_worker_fatal_error",
             error_type=type(e).__name__,
             error_message=str(e),
-            exc_info=True
+            exc_info=True,
         )
         sys.exit(1)
     logger.info("outbox_worker_shutdown_complete")

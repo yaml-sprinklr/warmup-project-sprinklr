@@ -40,7 +40,7 @@ level:ERROR
 **Useful Fields to Display:**
 - `timestamp`
 - `message`
-- `trace_id`
+- `trace.id`
 - `error_type`
 - `error_message`
 - `service_name`
@@ -60,11 +60,11 @@ duration_ms:>1000
 
 **Useful Fields:**
 - `timestamp`
-- `http_method`
-- `http_path`
+- `http.request.method`
+- `url.path`
 - `duration_ms`
-- `http_status_code`
-- `trace_id`
+- `http.response.status_code`
+- `trace.id`
 
 **Use Case:** Performance troubleshooting, identify bottlenecks
 
@@ -80,7 +80,7 @@ curl -i http://localhost:8000/api/v1/orders | grep X-Trace-Id
 
 **Step 2:** Query Kibana for all logs with that trace_id
 ```
-trace_id:"4bf92f3577b34da6a3ce929d0e0e4736"
+trace.id:"4bf92f3577b34da6a3ce929d0e0e4736"
 ```
 
 **Time Range:** Last 7 days (or adjust based on when request was made)
@@ -137,12 +137,12 @@ order_id:"ord_abc123"
 
 ### HTTP 5xx Errors
 ```
-http_status_code:>=500
+http.response.status_code:>=500
 ```
 
 ### HTTP 4xx Errors (Client Errors)
 ```
-http_status_code:>=400 AND http_status_code:<500
+http.response.status_code:>=400 AND http.response.status_code:<500
 ```
 
 ### Kafka Consumer Lag/Duplicates
@@ -333,16 +333,31 @@ kubectl exec -n elastic-system order-service-es-default-0 -- df -h /usr/share/el
   "service_name": "order-service",
   "environment": "production",
   "version": "v1.0.0",
-  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-  "span_id": "00f067aa0ba902b7",
+  "trace": {
+    "id": "4bf92f3577b34da6a3ce929d0e0e4736"
+  },
+  "span": {
+    "id": "00f067aa0ba902b7"
+  },
   "parent_span_id": "a1b2c3d4e5f6g7h8",
   "request_id": "req_abc123",
   "order_id": "ord_xyz789",
   "user_id": "usr_456",
-  "http_method": "POST",
-  "http_path": "/api/v1/orders",
-  "http_status_code": 201,
+  "http": {
+    "request": {
+      "method": "POST"
+    },
+    "response": {
+      "status_code": 201
+    }
+  },
+  "url": {
+    "path": "/api/v1/orders"
+  },
   "duration_ms": 145.67,
+  "event": {
+    "duration": 145670000
+  },
   "kubernetes": {
     "namespace": "order-service",
     "pod": {
@@ -362,8 +377,8 @@ kubectl exec -n elastic-system order-service-es-default-0 -- df -h /usr/share/el
 | `@timestamp` | date | Log timestamp (ISO 8601 UTC) |
 | `level` | keyword | Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `message` | text | Event name (structured, not free-form) |
-| `trace_id` | keyword | 128-bit distributed trace ID (32 hex chars) |
-| `span_id` | keyword | 64-bit span ID (16 hex chars) |
+| `trace.id` | keyword | 128-bit distributed trace ID (32 hex chars) |
+| `span.id` | keyword | 64-bit span ID (16 hex chars) |
 | `request_id` | keyword | Unique per HTTP request |
 | `duration_ms` | float | Request duration in milliseconds |
 | `error_type` | keyword | Exception class name |
@@ -374,7 +389,7 @@ kubectl exec -n elastic-system order-service-es-default-0 -- df -h /usr/share/el
 ## Best Practices
 
 ### 1. Always Use Trace IDs
-When reporting issues, include the `trace_id` from the API response header. This allows engineers to see the complete request flow.
+When reporting issues, include the `trace.id` from the API response header. This allows engineers to see the complete request flow.
 
 ### 2. Time Ranges Matter
 Adjust time range based on issue:
@@ -412,4 +427,4 @@ level:(INFO OR WARNING OR ERROR OR CRITICAL)
 1. Check this runbook first
 2. Search Slack #incidents for similar issues
 3. Page on-call engineer if critical
-4. Create incident ticket with trace_id and relevant logs
+4. Create incident ticket with trace.id and relevant logs

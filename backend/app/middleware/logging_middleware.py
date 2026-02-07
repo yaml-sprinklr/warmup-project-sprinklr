@@ -91,6 +91,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         # Extract request metadata
         # ========================
+        # Using ECS (Elastic Common Schema) field names for better compatibility
+        # with Elasticsearch, Kibana, and other observability tools.
         # These are the fields you'll query in Kibana when debugging:
         # - "Show me all POST /orders requests"
         # - "Find slow requests (duration > 1000ms)"
@@ -109,19 +111,19 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         # Log incoming request
         # ====================
-        # Learning: We log at DEBUG level because HTTP access logs can be VERY
-        # verbose in production. You might log 100,000 requests/hour.
+        # Learning: We log request START at DEBUG level because it's verbose.
+        # The request COMPLETION is logged at INFO with duration_ms, status code, etc.
         #
-        # Configure LOG_LEVEL=INFO in production to skip these, or use sampling
-        # (log 1% of successful requests, 100% of errors).
+        # This way, at LOG_LEVEL=INFO you see all completed requests with metrics,
+        # but skip the less useful "request received" logs.
 
         logger.debug(
             "http_request_received",
-            http_method=method,
-            http_path=path,
-            http_query=query_params,
-            client_ip=client_ip,
-            user_agent=user_agent,
+            **{"http.request.method": method},
+            **{"url.path": path},
+            **{"url.query": query_params},
+            **{"client.ip": client_ip},
+            **{"user_agent.original": user_agent},
         )
 
         # Process request
@@ -150,16 +152,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         # Determine log level based on response
         # ======================================
-        # Learning: Not all requests are equally important to log:
-        # - 2xx: DEBUG (success, very common)
+        # Learning: Log all HTTP requests at INFO level for observability
+        # - 2xx: INFO (success - need for Kibana queries on duration_ms)
         # - 4xx: INFO (client error, worth noting)
         # - 5xx: ERROR (server error, needs investigation)
         #
-        # This creates a natural filtering: set LOG_LEVEL=INFO to see only
-        # problems, not every successful request.
+        # All requests are logged at INFO or higher so we can search by
+        # duration_ms, status codes, and paths in Kibana.
 
         status_code = response.status_code
-        log_level = "debug"
+        log_level = "info"  # Changed from "debug" to "info"
 
         if status_code >= 500:
             log_level = "error"
@@ -170,16 +172,17 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             # Learning: Performance issues are worth logging even if status is 200
             log_level = "warning"
 
-        # Build log entry
-        # ===============
+        # Build log entry with ECS field names
+        # =====================================
         log_data = {
-            "http_method": method,
-            "http_path": path,
-            "http_query": query_params,
-            "http_status_code": status_code,
-            "duration_ms": round(duration_ms, 2),
-            "client_ip": client_ip,
-            "user_agent": user_agent,
+            "http.request.method": method,
+            "url.path": path,
+            "url.query": query_params,
+            "http.response.status_code": status_code,
+            "event.duration": round(duration_ms * 1_000_000, 0),  # ECS uses nanoseconds
+            "duration_ms": round(duration_ms, 2),  # Keep for readability
+            "client.ip": client_ip,
+            "user_agent.original": user_agent,
         }
 
         # Add error details if exception occurred
@@ -197,10 +200,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             )
         elif log_level == "warning":
             logger.warning("http_request_slow", **log_data)
-        elif log_level == "info":
-            logger.info("http_request_completed", **log_data)
         else:
-            logger.debug("http_request_completed", **log_data)
+            # All successful requests (2xx, 3xx, 4xx) logged at INFO
+            logger.info("http_request_completed", **log_data)
 
         # Re-raise exception if one occurred
         # ===================================

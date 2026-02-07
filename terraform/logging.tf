@@ -153,71 +153,61 @@ resource "kubernetes_manifest" "elasticsearch_cluster" {
 }
 
 # Kibana Instance
-resource "kubernetes_manifest" "kibana_instance" {
+# Uses terraform_data + kubectl apply instead of kubernetes_manifest
+# to avoid the "Provider produced inconsistent result after apply" bug
+# with ECK CRDs in the hashicorp/kubernetes provider.
+resource "terraform_data" "kibana_instance" {
   count = var.deploy_logging_stack ? 1 : 0
 
-  field_manager {
-    force_conflicts = true
+  triggers_replace = [
+    var.kibana_memory,
+    var.kibana_cpu,
+    kubernetes_namespace.elastic_system[0].metadata[0].name,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+cat > /tmp/tf-kibana-cr.yaml <<'KIBANA_YAML'
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: order-service-kibana
+  namespace: ${kubernetes_namespace.elastic_system[0].metadata[0].name}
+spec:
+  version: "8.16.1"
+  count: 1
+  elasticsearchRef:
+    name: order-service-es
+  podTemplate:
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            memory: "${var.kibana_memory}"
+            cpu: "${var.kibana_cpu}"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=384"
+  config:
+    telemetry.enabled: false
+    telemetry.optIn: false
+    logging.root.level: warn
+KIBANA_YAML
+kubectl apply -f /tmp/tf-kibana-cr.yaml
+kubectl wait --for=jsonpath='{.status.health}'=green kibana/order-service-kibana -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} --timeout=300s || true
+rm -f /tmp/tf-kibana-cr.yaml
+    EOT
   }
 
-  manifest = {
-    apiVersion = "kibana.k8s.elastic.co/v1"
-    kind       = "Kibana"
-    metadata = {
-      name      = "order-service-kibana"
-      namespace = kubernetes_namespace.elastic_system[0].metadata[0].name
-    }
-    spec = {
-      version = "8.16.1"
-      count   = 1
-
-      elasticsearchRef = {
-        name = "order-service-es"
-      }
-
-      podTemplate = {
-        spec = {
-          # ARM64 architecture support
-          nodeSelector = {
-            "kubernetes.io/arch" = "arm64"
-          }
-
-          containers = [
-            {
-              name = "kibana"
-
-              resources = {
-                requests = {
-                  memory = var.kibana_memory
-                  cpu    = var.kibana_cpu
-                }
-                limits = {
-                  memory = "1Gi"
-                  cpu    = "500m"
-                }
-              }
-
-              env = [
-                {
-                  name  = "NODE_OPTIONS"
-                  value = "--max-old-space-size=384"  # Limit Node.js heap
-                }
-              ]
-            }
-          ]
-        }
-      }
-
-      # Kibana configuration
-      config = {
-        # Disable telemetry
-        "telemetry.enabled" = false
-        "telemetry.optIn"   = false
-
-        # Reduce resource usage
-        "logging.root.level" = "warn"
-      }
-    }
+  provisioner "local-exec" {
+    when    = destroy
+    command = "kubectl delete kibana order-service-kibana -n elastic-system --ignore-not-found"
   }
 
   depends_on = [kubernetes_manifest.elasticsearch_cluster]
@@ -285,25 +275,78 @@ resource "kubernetes_manifest" "index_template" {
           }
           mappings = {
             properties = {
+              # Standard timestamp fields
               "@timestamp" = { type = "date" }
               timestamp    = { type = "date" }
+              
+              # Core logging fields
               level        = { type = "keyword" }
               message      = { type = "text" }
               service_name = { type = "keyword" }
               environment  = { type = "keyword" }
               version      = { type = "keyword" }
 
-              # Distributed tracing fields
-              trace_id        = { type = "keyword" }
-              span_id         = { type = "keyword" }
-              parent_span_id  = { type = "keyword" }
-              request_id      = { type = "keyword" }
+              # ECS Distributed tracing fields
+              trace = {
+                properties = {
+                  id = { type = "keyword" }
+                }
+              }
+              span = {
+                properties = {
+                  id = { type = "keyword" }
+                }
+              }
+              parent_span_id = { type = "keyword" }
+              request_id     = { type = "keyword" }
 
-              # HTTP fields
-              http_method      = { type = "keyword" }
-              http_path        = { type = "keyword" }
-              http_status_code = { type = "integer" }
-              duration_ms      = { type = "float" }
+              # ECS HTTP fields
+              http = {
+                properties = {
+                  request = {
+                    properties = {
+                      method = { type = "keyword" }
+                    }
+                  }
+                  response = {
+                    properties = {
+                      status_code = { type = "integer" }
+                    }
+                  }
+                }
+              }
+              
+              # ECS URL fields
+              url = {
+                properties = {
+                  path  = { type = "keyword" }
+                  query = { type = "keyword" }
+                }
+              }
+              
+              # ECS Event fields
+              event = {
+                properties = {
+                  duration = { type = "long" }  # nanoseconds
+                }
+              }
+              
+              # Keep duration_ms for readability
+              duration_ms = { type = "float" }
+
+              # ECS Client fields
+              client = {
+                properties = {
+                  ip = { type = "ip" }
+                }
+              }
+              
+              # ECS User agent fields
+              user_agent = {
+                properties = {
+                  original = { type = "keyword" }
+                }
+              }
 
               # Error fields
               error_type    = { type = "keyword" }
@@ -317,9 +360,21 @@ resource "kubernetes_manifest" "index_template" {
               event_type = { type = "keyword" }
 
               # Kubernetes metadata (added by Filebeat)
-              "kubernetes.namespace"     = { type = "keyword" }
-              "kubernetes.pod.name"      = { type = "keyword" }
-              "kubernetes.container.name" = { type = "keyword" }
+              kubernetes = {
+                properties = {
+                  namespace = { type = "keyword" }
+                  pod = {
+                    properties = {
+                      name = { type = "keyword" }
+                    }
+                  }
+                  container = {
+                    properties = {
+                      name = { type = "keyword" }
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -340,7 +395,7 @@ output "kibana_endpoint" {
 }
 
 output "elasticsearch_password_command" {
-  value = var.deploy_logging_stack ? "kubectl get secret order-service-es-elastic-user -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} -o=jsonpath='{.data.elastic}' | base64 --decode" : "Logging stack not deployed"
+  value = var.deploy_logging_stack ? "kubectl get secret order-service-es-es-elastic-user -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} -o=jsonpath='{.data.elastic}' | base64 --decode" : "Logging stack not deployed"
 }
 
 output "kibana_url" {
