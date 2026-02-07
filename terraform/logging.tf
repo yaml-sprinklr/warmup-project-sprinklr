@@ -88,9 +88,6 @@ resource "kubernetes_manifest" "elasticsearch_cluster" {
             "node.roles" = ["master", "data", "ingest"]
             "xpack.ml.enabled" = false
 
-            # Single-node mode (no cluster formation)
-            "discovery.type" = "single-node"
-
             # Reduce memory usage
             "indices.memory.index_buffer_size" = "128mb"
             "indices.queries.cache.size" = "5%"
