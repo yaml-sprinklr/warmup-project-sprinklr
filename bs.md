@@ -59,3 +59,15 @@ terraform apply \
 
 # Phase 2 (Everything else)
 terraform apply -auto-approve
+
+
+---
+
+
+Error: job: order-service/filebeat-setup is not in complete state
+│
+│   with kubernetes_job_v1.filebeat_setup[0],
+│   on filebeat-setup.tf line 3, in resource "kubernetes_job_v1" "filebeat_setup":
+│    3: resource "kubernetes_job_v1" "filebeat_setup" {
+│
+╵
