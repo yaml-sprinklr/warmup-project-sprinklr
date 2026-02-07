@@ -63,6 +63,10 @@ resource "helm_release" "eck_operator" {
 resource "kubernetes_manifest" "elasticsearch_cluster" {
   count = var.deploy_logging_stack ? 1 : 0
 
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "elasticsearch.k8s.elastic.co/v1"
     kind       = "Elasticsearch"
