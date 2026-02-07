@@ -8,7 +8,7 @@ image:
   repository: order-service 
   pullPolicy: Never
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v9"
+  tag: "v11"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -90,7 +90,7 @@ ingress:
 
 # Outbox Worker Configuration
 outboxWorker:
-  enabled: true
+  enabled: false
   replicaCount: 1
   metricsPort: 8000
   resources:

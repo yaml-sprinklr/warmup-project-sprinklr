@@ -37,7 +37,7 @@ variable "app_image_repository" {
 variable "app_image_tag" {
   type        = string
   description = "Docker image tag"
-  default     = "v9"
+  default     = "v11"
 
   validation {
     condition     = can(regex("^v[0-9]+$", var.app_image_tag))
@@ -96,7 +96,7 @@ variable "outbox_worker_image_repository" {
 variable "outbox_worker_image_tag" {
   type        = string
   description = "Outbox worker image tag"
-  default     = "v9"
+  default     = "v11"
 
   validation {
     condition     = can(regex("^v[0-9]+$", var.outbox_worker_image_tag))
@@ -156,7 +156,7 @@ variable "mock_user_producer_image_repository" {
 variable "mock_user_producer_image_tag" {
   type        = string
   description = "Mock user producer image tag (same as main app)"
-  default     = "v9"
+  default     = "v11"
 
   validation {
     condition     = can(regex("^v[0-9]+$", var.mock_user_producer_image_tag))

@@ -9,7 +9,11 @@ from fastapi.responses import Response
 from app.core.config import settings
 from app.core.redis import redis_client
 from app.core.kafka import kafka_producer, kafka_consumer
-from app.core.metrics import registry, background_tasks_running, background_task_errors_total
+from app.core.metrics import (
+    registry,
+    background_tasks_running,
+    background_task_errors_total,
+)
 from app.api.main import api_router
 from app.consumers import start_consumer
 from app.processors import start_order_processor
@@ -17,7 +21,7 @@ from app.middleware.metrics_middleware import MetricsMiddleware
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -40,11 +44,11 @@ async def lifespan(app: FastAPI):
         processor_task = asyncio.create_task(
             start_order_processor(), name="order-processor"
         )
-        
+
         # Track background tasks
         background_tasks_running.labels(task_name="kafka-consumer").set(1)
         background_tasks_running.labels(task_name="order-processor").set(1)
-        
+
         # Monitor task health
         asyncio.create_task(monitor_background_tasks(consumer_task, processor_task))
 
@@ -90,7 +94,7 @@ async def monitor_background_tasks(*tasks):
     """Monitor background tasks and update metrics on failure"""
     while True:
         await asyncio.sleep(30)  # Check every 30 seconds
-        
+
         for task in tasks:
             if task.done() and not task.cancelled():
                 task_name = task.get_name()
@@ -98,7 +102,9 @@ async def monitor_background_tasks(*tasks):
                     # This will raise if task had exception
                     task.result()
                 except Exception as e:
-                    logger.error(f"Background task {task_name} failed: {e}", exc_info=True)
+                    logger.error(
+                        f"Background task {task_name} failed: {e}", exc_info=True
+                    )
                     background_tasks_running.labels(task_name=task_name).set(0)
                     background_task_errors_total.labels(
                         task_name=task_name, error_type=type(e).__name__
@@ -111,6 +117,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
+
 
 @app.get("/metrics")
 async def metrics():

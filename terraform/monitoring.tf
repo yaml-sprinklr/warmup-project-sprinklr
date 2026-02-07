@@ -232,7 +232,7 @@ resource "kubernetes_manifest" "order_service_servicemonitor" {
         {
           port          = "http"
           path          = "/metrics"
-          interval      = "5s"
+          interval      = "15s"
           scrapeTimeout = "10s"
           relabelings = [
             {
@@ -290,7 +290,7 @@ resource "kubernetes_manifest" "order_service_outbox_worker_servicemonitor" {
         {
           port          = "http"
           path          = "/metrics"
-          interval      = "5s"
+          interval      = "15s"
           scrapeTimeout = "10s"
           relabelings = [
             {
