@@ -244,20 +244,3 @@ resource "kubernetes_daemonset" "filebeat" {
     kubernetes_manifest.elasticsearch_cluster
   ]
 }
-
-# Outputs
-output "elasticsearch_endpoint" {
-  value = var.deploy_logging_stack ? "kubectl port-forward -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} svc/order-service-es-http 9200:9200" : "Logging stack not deployed"
-}
-
-output "kibana_endpoint" {
-  value = var.deploy_logging_stack ? "kubectl port-forward -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} svc/order-service-kibana-kb-http 5601:5601" : "Logging stack not deployed"
-}
-
-output "elasticsearch_password_command" {
-  value = var.deploy_logging_stack ? "kubectl get secret order-service-es-elastic-user -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} -o=jsonpath='{.data.elastic}' | base64 --decode" : "Logging stack not deployed"
-}
-
-output "kibana_url" {
-  value = var.deploy_logging_stack ? "https://localhost:5601 (username: elastic, password: see elasticsearch_password_command)" : "Logging stack not deployed"
-}
