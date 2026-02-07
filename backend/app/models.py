@@ -167,6 +167,16 @@ class OutboxEvent(SQLModel, table=True):
     """
     Outbox table for transactional event publishing
     Events are written here atomically with DB changes, then published by worker
+
+    Trace Context Fields:
+    ---------------------
+    trace_id: 128-bit distributed trace ID (32 hex chars)
+    span_id: 64-bit span ID when event was created (16 hex chars)
+    parent_span_id: 64-bit parent span ID (16 hex chars), optional
+
+    Learning: We persist trace context in the outbox so the worker can
+    reconstruct the trace when publishing to Kafka hours/days later.
+    This enables end-to-end tracing from HTTP request → outbox → Kafka → consumer.
     """
 
     __tablename__ = "outbox_events"
@@ -177,6 +187,21 @@ class OutboxEvent(SQLModel, table=True):
     topic: str = Field(index=True)
     partition_key: str | None = Field(default=None)  # For Kafka partitioning
     payload: dict[str, Any] = Field(sa_column=Column(JSON))
+
+    # Distributed Tracing Context (NEW)
+    trace_id: str | None = Field(
+        default=None,
+        max_length=32,
+        index=True,  # Index for querying by trace_id in Kibana/Grafana
+    )
+    span_id: str | None = Field(
+        default=None,
+        max_length=16,
+    )
+    parent_span_id: str | None = Field(
+        default=None,
+        max_length=16,
+    )
 
     # Status tracking
     published: bool = Field(default=False, index=True)

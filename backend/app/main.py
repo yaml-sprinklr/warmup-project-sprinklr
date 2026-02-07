@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,12 +17,16 @@ from app.api.main import api_router
 from app.consumers import start_consumer
 from app.processors import start_order_processor
 from app.middleware.metrics_middleware import MetricsMiddleware
+from app.middleware.tracing_middleware import TracingMiddleware
+from app.middleware.logging_middleware import LoggingMiddleware
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging with structlog
+# Learning: This must be called BEFORE any logger.get_logger() calls
+# to ensure all loggers use the structlog configuration
+from app.core.logging import configure_logging, get_logger
+
+configure_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -32,7 +35,7 @@ async def lifespan(app: FastAPI):
     consumer_task = None
     processor_task = None
 
-    logger.info("Starting Order Service...")
+    logger.info("application_starting", service=settings.SERVICE_NAME, environment=settings.ENVIRONMENT)
 
     try:
         await redis_client.connect()
@@ -52,9 +55,12 @@ async def lifespan(app: FastAPI):
         # Monitor task health
         asyncio.create_task(monitor_background_tasks(consumer_task, processor_task))
 
-        logger.info("All services started")
+        logger.info("application_started",
+                   redis_connected=True,
+                   kafka_connected=True,
+                   background_tasks=["kafka-consumer", "order-processor"])
     except Exception as e:
-        logger.error(f"Startup failed: {e}", exc_info=True)
+        logger.error("application_startup_failed", error_type=type(e).__name__, error_message=str(e), exc_info=True)
         background_task_errors_total.labels(
             task_name="startup", error_type="startup_error"
         ).inc()
@@ -62,7 +68,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down Order Service...")
+    logger.info("application_shutting_down")
 
     try:
         if consumer_task and not consumer_task.done():
@@ -85,9 +91,9 @@ async def lifespan(app: FastAPI):
         await kafka_producer.stop()
         await redis_client.disconnect()
 
-        logger.info("Shutdown complete")
+        logger.info("application_shutdown_complete")
     except Exception as e:
-        logger.error(f"Shutdown error: {e}", exc_info=True)
+        logger.error("application_shutdown_error", error_type=type(e).__name__, error_message=str(e), exc_info=True)
 
 
 async def monitor_background_tasks(*tasks):
@@ -103,7 +109,11 @@ async def monitor_background_tasks(*tasks):
                     task.result()
                 except Exception as e:
                     logger.error(
-                        f"Background task {task_name} failed: {e}", exc_info=True
+                        "background_task_failed",
+                        task_name=task_name,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        exc_info=True
                     )
                     background_tasks_running.labels(task_name=task_name).set(0)
                     background_task_errors_total.labels(
@@ -122,11 +132,31 @@ app = FastAPI(
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
-    logger.debug("Serving metrics endpoint")
+    logger.debug("metrics_endpoint_served")
     return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
 
-# Add metrics middleware
+# Add middlewares
+# ===============
+# Learning: Middleware execution order is REVERSE of registration order!
+#
+# Registration order (below):
+#   1. MetricsMiddleware
+#   2. LoggingMiddleware
+#   3. TracingMiddleware
+#
+# Execution order (incoming request):
+#   TracingMiddleware → LoggingMiddleware → MetricsMiddleware → Route Handler
+#
+# Why this order?
+# 1. TracingMiddleware runs FIRST to set up trace context (trace_id, span_id)
+# 2. LoggingMiddleware runs SECOND so it can include trace_id in request logs
+# 3. MetricsMiddleware runs THIRD to record metrics
+#
+# This ensures trace_id is available in all logs and metrics!
+
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(TracingMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

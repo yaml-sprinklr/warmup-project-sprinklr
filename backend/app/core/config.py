@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     OUTBOX_MAX_RETRY_ATTEMPTS: int = 5  # Max attempts before flagging for manual intervention
     OUTBOX_ERROR_MESSAGE_MAX_LENGTH: int = 500  # Max characters to store in last_error field
 
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    LOG_FORMAT: str = "json"  # json or console (console for dev, json for prod)
+    ENVIRONMENT: str = "development"  # development, staging, production
+    SERVICE_NAME: str = "order-service"
+    SERVICE_VERSION: str = "v1.0.0"  # Deployment version (override with git SHA in prod)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

@@ -1,10 +1,12 @@
-"""  
-Outbox worker - separate process that publishes events from outbox to Kafka
+"""
+Outbox worker - separate process that publishes events from outbox to Kafka with trace propagation
 Runs as independent K8s deployment for reliability
+
+Learning: This worker reconstructs trace context from the outbox table and injects
+it into Kafka message headers, enabling end-to-end distributed tracing.
 """
 
 import asyncio
-import logging
 import signal
 import sys
 import time
@@ -12,10 +14,13 @@ from datetime import datetime, UTC
 
 from prometheus_client import start_http_server
 from sqlmodel import Session, select, func
+import structlog
 
 from app.core.config import settings
 from app.core.db import engine
 from app.core.kafka import kafka_producer
+from app.core.logging import configure_logging, get_logger
+from app.core.tracing import create_trace_context, TraceContext
 from app.core.metrics import (
     registry,
     outbox_events_pending,
@@ -25,12 +30,9 @@ from app.core.metrics import (
 )
 from app.models import OutboxEvent
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging
+configure_logging()
+logger = get_logger(__name__)
 
 # Global flag for graceful shutdown
 shutdown_flag = False
@@ -39,7 +41,7 @@ shutdown_flag = False
 def signal_handler(sig, frame):
     """Handle shutdown signals"""
     global shutdown_flag
-    logger.info(f"Received signal {sig}, initiating graceful shutdown...")
+    logger.info("shutdown_signal_received", signal=sig)
     shutdown_flag = True
 
 
@@ -47,7 +49,7 @@ async def process_outbox_events():
     """
     Main worker loop - polls outbox table and publishes events
     """
-    logger.info("Starting outbox worker...")
+    logger.info("outbox_worker_starting")
 
     await kafka_producer.start()
 
@@ -57,28 +59,42 @@ async def process_outbox_events():
                 published_count = await publish_pending_events(settings.OUTBOX_BATCH_SIZE)
 
                 if published_count > 0:
-                    logger.info(f"Published {published_count} events")
-                
+                    logger.info("outbox_events_published", count=published_count)
+
                 # Update pending events gauge
                 update_pending_count()
 
                 await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL_SECONDS)
 
             except Exception as e:
-                logger.error(f"Error in outbox processing: {e}", exc_info=True)
+                logger.error(
+                    "outbox_processing_error",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    exc_info=True
+                )
                 await asyncio.sleep(settings.OUTBOX_ERROR_BACKOFF_SECONDS)
 
     except asyncio.CancelledError:
-        logger.info("Outbox worker cancelled")
+        logger.info("outbox_worker_cancelled")
         raise
     finally:
         await kafka_producer.stop()
-        logger.info("Outbox worker stopped")
+        logger.info("outbox_worker_stopped")
 
 
 async def publish_pending_events(batch_size: int) -> int:
     """
-    Fetch and publish unpublished events from outbox
+    Fetch and publish unpublished events from outbox with trace context propagation
+
+    Learning: For each outbox event, we:
+    1. Extract trace_id/span_id from the database row
+    2. Reconstruct W3C traceparent header
+    3. Inject as Kafka message header
+    4. Consumer can extract and continue the trace!
+
+    This enables tracing from HTTP request → DB → Kafka → Consumer,
+    even when the outbox worker processes events hours/days later.
 
     Args:
         batch_size: Maximum number of events to process
@@ -102,16 +118,44 @@ async def publish_pending_events(batch_size: int) -> int:
 
         for event in events:
             start_time = time.time()
+
+            # Reconstruct trace context from outbox event
+            # Learning: The trace_id was captured when the event was created
+            # (minutes/hours ago). We reconstruct it to continue the trace.
+            trace_context = None
+            if event.trace_id:
+                trace_context = create_trace_context(
+                    trace_id=event.trace_id,
+                    parent_span_id=event.span_id,  # The publishing span's parent is the creation span
+                )
+
+                # Bind to structlog so logs include trace_id
+                structlog.contextvars.bind_contextvars(
+                    trace_id=trace_context.trace_id,
+                    span_id=trace_context.span_id,
+                    parent_span_id=trace_context.parent_span_id,
+                )
+
             try:
                 if not kafka_producer.producer:
                     raise RuntimeError("Kafka producer not started")
-                # Publish to Kafka
+
+                # Prepare Kafka headers with trace context
+                # Learning: Kafka headers are list of (str, bytes) tuples
+                headers = []
+                if trace_context:
+                    # Inject W3C traceparent header
+                    traceparent = trace_context.to_traceparent_header()
+                    headers.append(("traceparent", traceparent.encode("utf-8")))
+
+                # Publish to Kafka with trace headers
                 await kafka_producer.producer.send_and_wait(
                     topic=event.topic,
                     value=event.payload,
                     key=event.partition_key.encode("utf-8")
                     if event.partition_key
                     else None,
+                    headers=headers,  # NEW: Include trace context
                 )
 
                 # Mark as published
@@ -123,15 +167,18 @@ async def publish_pending_events(batch_size: int) -> int:
                 session.commit()
 
                 published_count += 1
-                
+
                 # Track successful processing
                 duration = time.time() - start_time
                 outbox_events_processed_total.labels(status="success").inc()
                 outbox_publish_duration_seconds.observe(duration)
 
                 logger.debug(
-                    f"Published event {event.event_id} to {event.topic} "
-                    f"(type: {event.event_type})"
+                    "outbox_event_published",
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    topic=event.topic,
+                    has_trace_context=trace_context is not None,
                 )
 
             except Exception as e:
@@ -144,22 +191,31 @@ async def publish_pending_events(batch_size: int) -> int:
 
                 session.add(event)
                 session.commit()
-                
+
                 # Track failed processing and retries
                 outbox_events_processed_total.labels(status="failure").inc()
                 outbox_retry_attempts_total.labels(event_type=event.event_type).inc()
 
                 logger.error(
-                    f"Failed to publish event {event.event_id} "
-                    f"(attempt {event.attempts}): {e}"
+                    "outbox_event_publish_failed",
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    attempts=event.attempts,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
                 )
 
                 # TODO: Move to dead letter queue after max attempts
                 if event.attempts >= settings.OUTBOX_MAX_RETRY_ATTEMPTS:
                     logger.critical(
-                        f"Event {event.event_id} failed {event.attempts} times, "
-                        "needs manual intervention"
+                        "outbox_event_max_retries_exceeded",
+                        event_id=event.event_id,
+                        attempts=event.attempts,
+                        needs_manual_intervention=True,
                     )
+            finally:
+                # Clear trace context for next event
+                structlog.contextvars.clear_contextvars()
 
     return published_count
 
@@ -185,23 +241,30 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    logger.info("Outbox worker starting up...")
+    logger.info("outbox_worker_main_starting",
+               service=settings.SERVICE_NAME,
+               environment=settings.ENVIRONMENT)
 
     # Start metrics server
     metrics_port = 8000
     if hasattr(settings, "METRICS_PORT"):
         metrics_port = int(settings.METRICS_PORT)  # type: ignore
     start_http_server(metrics_port, registry=registry)
-    logger.info(f"Metrics server started on port {metrics_port}")
+    logger.info("metrics_server_started", port=metrics_port)
 
     try:
         await process_outbox_events()
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.info("keyboard_interrupt_received")
     except Exception as e:
-        logger.error(f"Fatal error in outbox worker: {e}", exc_info=True)
+        logger.error(
+            "outbox_worker_fatal_error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            exc_info=True
+        )
         sys.exit(1)
-    logger.info("Outbox worker shutdown complete")
+    logger.info("outbox_worker_shutdown_complete")
 
 
 if __name__ == "__main__":

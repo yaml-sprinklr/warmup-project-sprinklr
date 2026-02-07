@@ -209,6 +209,10 @@ resource "kubernetes_config_map" "app_config" {
     KAFKA_TOPIC_USER_UPDATED    = "user.updated"
     KAFKA_TOPIC_USER_DELETED    = "user.deleted"
 
+    # Logging Configuration
+    LOG_LEVEL  = "INFO"
+    LOG_FORMAT = "json"
+
     # User Service API (for fallback)
     USER_SERVICE_URL = var.user_service_url
   }
