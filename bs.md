@@ -39,3 +39,23 @@ kubernetes_manifest.kibana_instance[0]: Modifying...
 │
 │ This is a bug in the provider, which should be reported in the provider's own issue tracker.
 ╵
+
+
+---
+
+# Destroy logging stack components
+terraform destroy \
+  -target=kubernetes_manifest.kibana_instance \
+  -target=kubernetes_manifest.elasticsearch_cluster \
+  -target=helm_release.eck_operator \
+  -auto-approve
+
+# Re-apply safely (Phase 1)
+terraform apply \
+  -target=kubernetes_namespace.elastic_system \
+  -target=helm_release.eck_operator \
+  -target=kubernetes_namespace.order_service \
+  -auto-approve
+
+# Phase 2 (Everything else)
+terraform apply -auto-approve
