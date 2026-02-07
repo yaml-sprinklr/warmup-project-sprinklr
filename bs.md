@@ -20,3 +20,22 @@ kubernetes_manifest.elasticsearch_cluster[0]: Modifying...
 │
 │ You can override this conflict by setting "force_conflicts" to true in the "field_manager" block.
 ╵
+
+---
+
+kubernetes_job_v1.db_migrations: Creating...
+kubernetes_job_v1.db_migrations: Creation complete after 0s [id=order-service/order-service-migrations]
+kubernetes_manifest.elasticsearch_cluster[0]: Modifying...
+kubernetes_manifest.elasticsearch_cluster[0]: Modifications complete after 0s
+kubernetes_config_map.filebeat_config[0]: Modifying... [id=order-service/filebeat-config]
+kubernetes_config_map.filebeat_config[0]: Modifications complete after 0s [id=order-service/filebeat-config]
+kubernetes_manifest.kibana_instance[0]: Modifying...
+╷
+│ Error: Provider produced inconsistent result after apply
+│
+│ When applying changes to kubernetes_manifest.kibana_instance[0], provider
+│ "provider[\"registry.terraform.io/hashicorp/kubernetes\"]" produced an unexpected new value: .object: wrong final value
+│ type: incorrect object attributes.
+│
+│ This is a bug in the provider, which should be reported in the provider's own issue tracker.
+╵
