@@ -65,7 +65,7 @@ Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
 
 Outputs:
 
-elasticsearch_endpoint = "kubectl port-forward -n elastic-system svc/order-service-es-http 9200:9200"
+elasticsearch_endpoint = "kubectl port-forward -n elastic-system svc/order-service-es-es-http 9200:9200"
 elasticsearch_password_command = "kubectl get secret order-service-es-elastic-user -n elastic-system -o=jsonpath='{.data.elastic}' | base64 --decode"
 kibana_endpoint = "kubectl port-forward -n elastic-system svc/order-service-kibana-kb-http 5601:5601"
 kibana_url = "https://localhost:5601 (username: elastic, password: see elasticsearch_password_command)"

@@ -110,7 +110,7 @@ logging:
 filebeat:
   enabled: true
   elasticsearch:
-    host: "order-service-es-http.elastic-system.svc.cluster.local"
+    host: "order-service-es-es-http.elastic-system.svc.cluster.local"
     port: 9200
     username: "elastic"
     passwordSecret: "order-service-es-elastic-user"  # Created by ECK operator

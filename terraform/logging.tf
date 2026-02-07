@@ -327,7 +327,7 @@ resource "kubernetes_manifest" "index_template" {
 
 # Outputs
 output "elasticsearch_endpoint" {
-  value = var.deploy_logging_stack ? "kubectl port-forward -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} svc/order-service-es-http 9200:9200" : "Logging stack not deployed"
+  value = var.deploy_logging_stack ? "kubectl port-forward -n ${kubernetes_namespace.elastic_system[0].metadata[0].name} svc/order-service-es-es-http 9200:9200" : "Logging stack not deployed"
 }
 
 output "kibana_endpoint" {

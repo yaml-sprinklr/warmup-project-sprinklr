@@ -46,7 +46,7 @@ resource "kubernetes_config_map" "filebeat_config" {
 
       # Elasticsearch output
       output.elasticsearch:
-        hosts: ["order-service-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200"]
+        hosts: ["order-service-es-es-http.${kubernetes_namespace.elastic_system[0].metadata[0].name}.svc.cluster.local:9200"]
         index: "order-service-%%{+yyyy.MM.dd}"
         username: "elastic"
         password: "$${ELASTICSEARCH_PASSWORD}"
