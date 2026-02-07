@@ -10,7 +10,7 @@ crash.log
 crash.*.log
 
 # Variable files may contain secrets
-terraform.tfvars
+# terraform.tfvars
 *.auto.tfvars
 
 # Override files
