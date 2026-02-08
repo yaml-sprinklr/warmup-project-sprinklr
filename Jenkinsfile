@@ -20,7 +20,7 @@ pipeline {
         sh """
           set -euo pipefail
           nerdctl --namespace ${NERDCTL_NAMESPACE} run --rm \\
-            -v "\\\$PWD:/workspace" -w /workspace \\
+            -v "\$PWD:/workspace" -w /workspace \\
             ${UV_IMAGE} \\
             sh -lc "uv sync --frozen --group dev --package app && uv run --package app python -m unittest discover -s backend/tests -p 'test_*.py'"
         """
