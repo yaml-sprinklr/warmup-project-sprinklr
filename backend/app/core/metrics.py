@@ -128,6 +128,31 @@ redis_errors_total = Counter(
 )
 
 # =============================================================================
+# USER VALIDATION METRICS
+# =============================================================================
+
+user_validation_total = Counter(
+    "user_validation_total",
+    "Total user validation attempts by result",
+    ["result"],  # cache_hit, cache_miss, not_found, inactive, error
+    registry=registry,
+)
+
+user_validation_duration_seconds = Histogram(
+    "user_validation_duration_seconds",
+    "User validation latency in seconds",
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+    registry=registry,
+)
+
+user_service_api_calls_total = Counter(
+    "user_service_api_calls_total",
+    "Total calls to User Service API",
+    ["status"],  # success, not_found, failure, timeout
+    registry=registry,
+)
+
+# =============================================================================
 # KAFKA EVENT METRICS
 # =============================================================================
 

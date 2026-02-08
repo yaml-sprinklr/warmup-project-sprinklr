@@ -1,12 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlmodel import func, select
 from sqlalchemy.orm import selectinload
 
-from app.deps import SessionDep
+from app.deps import SessionDep, RedisDep
 from app.models import Order, OrderCreate, OrderItem, OrderPublic, OrdersPublic
-from app.services import OutboxService
+from app.services import OutboxService, UserService
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.events import OrderCreatedData
@@ -31,7 +31,13 @@ async def read_orders(session: SessionDep, skip: int = 0, limit: int = 100) -> A
     )
     orders = session.exec(statement).all()
 
-    logger.info("orders_list_retrieved", count=count, returned=len(orders), skip=skip, limit=limit)
+    logger.info(
+        "orders_list_retrieved",
+        count=count,
+        returned=len(orders),
+        skip=skip,
+        limit=limit,
+    )
 
     return OrdersPublic(
         data=[OrderPublic.model_validate(order) for order in orders], count=count
@@ -39,7 +45,7 @@ async def read_orders(session: SessionDep, skip: int = 0, limit: int = 100) -> A
 
 
 @router.post("/", response_model=OrderPublic)
-async def create_order(*, session: SessionDep, order_in: OrderCreate):
+async def create_order(*, session: SessionDep, redis: RedisDep, order_in: OrderCreate):
     """Create a new order"""
     logger.info(
         "order_creation_started",
@@ -49,6 +55,27 @@ async def create_order(*, session: SessionDep, order_in: OrderCreate):
         items_count=len(order_in.items),
     )
 
+    # Step 1: Validate user exists and is active
+    user = await UserService.validate_user(order_in.user_id, redis)
+    if not user:
+        logger.warning(
+            "order_creation_failed",
+            user_id=order_in.user_id,
+            reason="user_not_found_or_inactive",
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="User not found or inactive. Please ensure the user exists and is active before creating an order.",
+        )
+
+    logger.debug(
+        "order_user_validated",
+        user_id=order_in.user_id,
+        user_email=user.email,
+        user_name=user.name,
+    )
+
+    # Step 2: Create order
     order_data = order_in.model_dump(exclude={"items"})
     order = Order(**order_data)
     order.items = [OrderItem(**item.model_dump()) for item in order_in.items]
