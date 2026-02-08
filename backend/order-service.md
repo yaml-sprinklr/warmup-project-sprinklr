@@ -128,6 +128,16 @@ async def lifespan(app: FastAPI):
 2. leaving out nitty gritty of asyncio for now
 3. TODO: load test
 
-### Milestone 3
+## End Game TODO
 
+- sanity check of metrics, logs, traces
+- ci/cd pipeline using jenkins
+- better load tests (using ingress?)
+- document everything and clean up code and code docs.
+- logging levels should be meaningful. especially info level should have sane amount of logs
+- unit tests and integration tests - should be run during ci/cd pipeline
 
+## Jenkins
+
+- not using kaniko because
+- other alternatives to kaniko: buildah and buildkit

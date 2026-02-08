@@ -4,6 +4,7 @@ pipeline {
     timestamps()
   }
   environment {
+    PATH = "/Users/yash.malik/.rd/bin:/usr/local/bin:/opt/homebrew/bin:${env.PATH}"
     NERDCTL_NAMESPACE = "k8s.io"
     NERDCTL_PULL = "never"
     APP_IMAGE = "order-service:ci"
