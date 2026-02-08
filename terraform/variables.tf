@@ -40,8 +40,8 @@ variable "app_image_tag" {
   default     = "v15"
 
   validation {
-    condition     = can(regex("^v[0-9]+$", var.app_image_tag))
-    error_message = "Image tag must be in format v1, v2, v3, etc."
+    condition     = can(regex("^(v[0-9]+|ci)$", var.app_image_tag))
+    error_message = "Image tag must be in format v1, v2, v3, etc., or ci."
   }
 }
 
@@ -99,8 +99,8 @@ variable "outbox_worker_image_tag" {
   default     = "v15"
 
   validation {
-    condition     = can(regex("^v[0-9]+$", var.outbox_worker_image_tag))
-    error_message = "Image tag must be in format v1, v2, v3, etc."
+    condition     = can(regex("^(v[0-9]+|ci)$", var.outbox_worker_image_tag))
+    error_message = "Image tag must be in format v1, v2, v3, etc., or ci."
   }
 }
 
@@ -159,8 +159,8 @@ variable "mock_user_producer_image_tag" {
   default     = "v15"
 
   validation {
-    condition     = can(regex("^v[0-9]+$", var.mock_user_producer_image_tag))
-    error_message = "Image tag must be in format v1, v2, v3, etc."
+    condition     = can(regex("^(v[0-9]+|ci)$", var.mock_user_producer_image_tag))
+    error_message = "Image tag must be in format v1, v2, v3, etc., or ci."
   }
 }
 

@@ -4,12 +4,12 @@ namespace   = "order-service"
 # Application Configuration
 app_name             = "order-service"
 app_image_repository = "order-service"
-app_image_tag        = "v15"
+app_image_tag        = "ci"
 app_replica_count    = 2  # Small for dev
 
 # Keep worker images aligned with app
-outbox_worker_image_tag     = "v15"
-mock_user_producer_image_tag = "v15"
+outbox_worker_image_tag     = "ci"
+mock_user_producer_image_tag = "ci"
 
 app_resources = {
   requests = {
