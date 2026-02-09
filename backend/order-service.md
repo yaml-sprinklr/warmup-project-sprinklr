@@ -136,9 +136,11 @@ async def lifespan(app: FastAPI):
 - document everything and clean up code and code docs.
 - logging levels should be meaningful. especially info level should have sane amount of logs
 - unit tests and integration tests - should be run during ci/cd pipeline
+- diagrams
 
 ## Jenkins
 
 - not using kaniko because
 - other alternatives to kaniko: buildah and buildkit
 - i can run jenkins inside my k8s cluster, setup my own registry inside the cluster, jenkins pushes images to registry, update k8s pull policy to pull from here.
+- replace unittest with pytest
