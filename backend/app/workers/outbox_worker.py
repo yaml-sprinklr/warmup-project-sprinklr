@@ -157,9 +157,7 @@ async def publish_pending_events(batch_size: int) -> int:
                 await kafka_producer.producer.send_and_wait(
                     topic=event.topic,
                     value=event.payload,
-                    key=event.partition_key.encode("utf-8")
-                    if event.partition_key
-                    else None,
+                    key=event.partition_key if event.partition_key else None,
                     headers=headers,  # NEW: Include trace context
                 )
                 kafka_duration = time.time() - kafka_start_time

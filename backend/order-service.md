@@ -137,6 +137,7 @@ async def lifespan(app: FastAPI):
 - logging levels should be meaningful. especially info level should have sane amount of logs
 - unit tests and integration tests - should be run during ci/cd pipeline
 - diagrams
+- filebeat terraform apply takes too long
 
 ## Jenkins
 
