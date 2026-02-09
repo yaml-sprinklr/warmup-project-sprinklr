@@ -355,6 +355,42 @@ resource "helm_release" "order_service" {
     value = kubernetes_secret.db_credentials.metadata[0].name
   }
 
+  # Enable outbox worker
+  set {
+    name  = "outboxWorker.enabled"
+    value = var.outbox_worker_enabled
+  }
+
+  set {
+    name  = "outboxWorker.replicaCount"
+    value = var.outbox_worker_replica_count
+  }
+
+  set {
+    name  = "outboxWorker.metricsPort"
+    value = 8000
+  }
+
+  set {
+    name  = "outboxWorker.resources.requests.cpu"
+    value = var.outbox_worker_resources.requests.cpu
+  }
+
+  set {
+    name  = "outboxWorker.resources.requests.memory"
+    value = var.outbox_worker_resources.requests.memory
+  }
+
+  set {
+    name  = "outboxWorker.resources.limits.cpu"
+    value = var.outbox_worker_resources.limits.cpu
+  }
+
+  set {
+    name  = "outboxWorker.resources.limits.memory"
+    value = var.outbox_worker_resources.limits.memory
+  }
+
   depends_on = [
     helm_release.postgresql,
     helm_release.redis,
@@ -373,82 +409,8 @@ resource "helm_release" "order_service" {
   ]
 }
 
-# OUTBOX WORKER DEPLOYMENT
-
-resource "kubernetes_deployment_v1" "outbox_worker" {
-  count = var.outbox_worker_enabled ? 1 : 0
-
-  metadata {
-    name      = "${var.app_name}-outbox-worker"
-    namespace = kubernetes_namespace.order_service.metadata[0].name
-
-    labels = merge(
-      var.common_labels,
-      {
-        app       = var.app_name
-        component = "outbox-worker"
-      }
-    )
-  }
-
-  spec {
-    replicas = var.outbox_worker_replica_count
-
-    selector {
-      match_labels = {
-        app       = var.app_name
-        component = "outbox-worker"
-      }
-    }
-
-    template {
-      metadata {
-        labels = {
-          app       = var.app_name
-          component = "outbox-worker"
-        }
-      }
-
-      spec {
-        container {
-          name  = "outbox-worker"
-          image = "${var.outbox_worker_image_repository}:${var.outbox_worker_image_tag}"
-
-          command = ["python", "-m", "app.workers.outbox_worker"]
-
-          env_from {
-            config_map_ref {
-              name = kubernetes_config_map.app_config.metadata[0].name
-            }
-          }
-
-          env_from {
-            secret_ref {
-              name = kubernetes_secret.db_credentials.metadata[0].name
-            }
-          }
-
-          resources {
-            requests = {
-              cpu    = var.outbox_worker_resources.requests.cpu
-              memory = var.outbox_worker_resources.requests.memory
-            }
-            limits = {
-              cpu    = var.outbox_worker_resources.limits.cpu
-              memory = var.outbox_worker_resources.limits.memory
-            }
-          }
-        }
-      }
-    }
-  }
-
-  depends_on = [
-    kubernetes_config_map.app_config,
-    kubernetes_secret.db_credentials,
-    kubernetes_job_v1.db_migrations
-  ]
-}
+# OUTBOX WORKER - Deployed via helm chart (see helm_release.order_service above)
+# Service and Deployment are created by the helm chart when outboxWorker.enabled=true
 
 # MOCK USER PRODUCER DEPLOYMENT (for testing)
 
