@@ -1,7 +1,11 @@
 #!/usr/bin/env zsh
 
+# Generate a random UUID (works on macOS + most Linux distros with uuidgen)
+USER_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+
+echo "user_$USER_ID"
 http POST http://localhost:8080/api/v1/orders/ \
-  user_id=550e8400-e29b-41d4-a716-446655440000 \
+  user_id="user_$USER_ID" \
   total_amount:=100.0 \
   currency=USD \
   shipping_address="DLF PHASE 2, GURGAON" \

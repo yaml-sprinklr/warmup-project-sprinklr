@@ -141,3 +141,4 @@ async def lifespan(app: FastAPI):
 
 - not using kaniko because
 - other alternatives to kaniko: buildah and buildkit
+- i can run jenkins inside my k8s cluster, setup my own registry inside the cluster, jenkins pushes images to registry, update k8s pull policy to pull from here.
