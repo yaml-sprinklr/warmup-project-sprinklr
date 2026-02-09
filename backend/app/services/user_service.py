@@ -14,7 +14,7 @@ from app.core.logging import get_logger
 from app.clients.user_client import user_client
 from app.models import UserData
 from app.core.config import settings
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     user_validation_total,
     user_validation_duration_seconds,
     user_service_api_calls_total,

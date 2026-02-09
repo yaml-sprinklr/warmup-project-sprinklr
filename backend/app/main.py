@@ -8,7 +8,7 @@ from fastapi.responses import Response
 from app.core.config import settings
 from app.core.redis import redis_client
 from app.core.kafka import kafka_producer, kafka_consumer
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     registry,
     background_tasks_running,
     background_task_errors_total,
@@ -35,7 +35,11 @@ async def lifespan(app: FastAPI):
     consumer_task = None
     processor_task = None
 
-    logger.info("application_starting", service=settings.SERVICE_NAME, environment=settings.ENVIRONMENT)
+    logger.info(
+        "application_starting",
+        service=settings.SERVICE_NAME,
+        environment=settings.ENVIRONMENT,
+    )
 
     try:
         await redis_client.connect()
@@ -55,12 +59,19 @@ async def lifespan(app: FastAPI):
         # Monitor task health
         asyncio.create_task(monitor_background_tasks(consumer_task, processor_task))
 
-        logger.info("application_started",
-                   redis_connected=True,
-                   kafka_connected=True,
-                   background_tasks=["kafka-consumer", "order-processor"])
+        logger.info(
+            "application_started",
+            redis_connected=True,
+            kafka_connected=True,
+            background_tasks=["kafka-consumer", "order-processor"],
+        )
     except Exception as e:
-        logger.error("application_startup_failed", error_type=type(e).__name__, error_message=str(e), exc_info=True)
+        logger.error(
+            "application_startup_failed",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            exc_info=True,
+        )
         background_task_errors_total.labels(
             task_name="startup", error_type="startup_error"
         ).inc()
@@ -93,7 +104,12 @@ async def lifespan(app: FastAPI):
 
         logger.info("application_shutdown_complete")
     except Exception as e:
-        logger.error("application_shutdown_error", error_type=type(e).__name__, error_message=str(e), exc_info=True)
+        logger.error(
+            "application_shutdown_error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            exc_info=True,
+        )
 
 
 async def monitor_background_tasks(*tasks):
@@ -113,7 +129,7 @@ async def monitor_background_tasks(*tasks):
                         task_name=task_name,
                         error_type=type(e).__name__,
                         error_message=str(e),
-                        exc_info=True
+                        exc_info=True,
                     )
                     background_tasks_running.labels(task_name=task_name).set(0)
                     background_task_errors_total.labels(

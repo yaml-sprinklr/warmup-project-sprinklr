@@ -14,7 +14,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     http_requests_total,
     http_request_duration_seconds,
     http_requests_in_progress,

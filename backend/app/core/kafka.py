@@ -13,7 +13,7 @@ from aiokafka.errors import KafkaError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     kafka_events_published_total,
     kafka_events_consumed_total,
     kafka_publish_duration_seconds,

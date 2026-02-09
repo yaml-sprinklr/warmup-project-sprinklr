@@ -15,7 +15,10 @@ from app.core.tracing import (
     clear_trace_context,
     get_trace_context,
 )
-from app.core.metrics import kafka_events_consumed_total, kafka_events_duplicate_total
+from app.core.metrics.metrics import (
+    kafka_events_consumed_total,
+    kafka_events_duplicate_total,
+)
 from app.models import Order, OrderStatus
 from app.events import (
     UserCreatedData,

@@ -11,7 +11,7 @@ from sqlmodel import create_engine, Session
 from sqlalchemy import event, pool
 
 from app.core.config import settings
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     db_pool_in_use,
     db_pool_available,
     db_pool_waiters,
@@ -39,7 +39,7 @@ engine = create_engine(
 def update_pool_metrics():
     """Update connection pool metrics"""
     pool_status = engine.pool.status()  # type: ignore
-    
+
     # Parse pool status string (format: "Pool size: X  Connections in pool: Y  Current Overflow: Z  Current Checked out connections: W")
     # This is a bit hacky but sqlalchemy doesn't expose these directly
     if hasattr(engine.pool, "size"):
@@ -48,10 +48,10 @@ def update_pool_metrics():
         checked_out = pool_obj.checkedout() if hasattr(pool_obj, "checkedout") else 0
         size = pool_obj.size() if hasattr(pool_obj, "size") else 0
         overflow = pool_obj.overflow() if hasattr(pool_obj, "overflow") else 0
-        
+
         in_use = checked_out
         available = size - checked_out + overflow
-        
+
         db_pool_in_use.set(in_use)
         db_pool_available.set(available)
 
@@ -77,7 +77,7 @@ def receive_checkin(dbapi_conn, connection_record):
         wait_time = time.time() - connection_record.info["checkout_start"]
         db_pool_wait_seconds.observe(wait_time)
         del connection_record.info["checkout_start"]
-    
+
     update_pool_metrics()
 
 
@@ -89,13 +89,13 @@ def receive_checkin(dbapi_conn, connection_record):
 def _extract_operation_and_table(statement: str) -> tuple[str, str]:
     """
     Extract operation type and table name from SQL statement
-    
+
     Returns:
         Tuple of (operation, table) where operation is select/insert/update/delete
     """
     # Normalize the statement (lowercase, remove extra whitespace)
     normalized = " ".join(statement.lower().split())
-    
+
     # Extract operation
     if normalized.startswith("select"):
         operation = "select"
@@ -107,15 +107,14 @@ def _extract_operation_and_table(statement: str) -> tuple[str, str]:
         operation = "delete"
     else:
         operation = "other"
-    
+
     # Extract table name (simplified - just get first table mentioned)
     # This regex looks for FROM <table> or INTO <table> or UPDATE <table>
     table_match = re.search(
-        r"(?:from|into|update|join)\s+([a-z_][a-z0-9_]*)",
-        normalized
+        r"(?:from|into|update|join)\s+([a-z_][a-z0-9_]*)", normalized
     )
     table = table_match.group(1) if table_match else "unknown"
-    
+
     return operation, table
 
 
@@ -131,12 +130,11 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
     if hasattr(context, "_query_start_time"):
         duration = time.time() - context._query_start_time
         operation, table = _extract_operation_and_table(statement)
-        
-        db_query_duration_seconds.labels(
-            operation=operation,
-            table=table
-        ).observe(duration)
-        
+
+        db_query_duration_seconds.labels(operation=operation, table=table).observe(
+            duration
+        )
+
         db_queries_total.labels(operation=operation).inc()
 
 
@@ -145,7 +143,7 @@ def handle_error(exception_context):
     """Track database errors"""
     exception = exception_context.original_exception
     error_type = type(exception).__name__.lower()
-    
+
     # Categorize common error types
     if "timeout" in error_type:
         error_category = "timeout"
@@ -155,7 +153,7 @@ def handle_error(exception_context):
         error_category = "connection"
     else:
         error_category = "other"
-    
+
     db_query_errors_total.labels(error_type=error_category).inc()
 
 
@@ -168,7 +166,7 @@ def handle_error(exception_context):
 def get_instrumented_session() -> Generator[Session, None, None]:
     """
     Context manager for database sessions with automatic metric tracking
-    
+
     Usage:
         with get_instrumented_session() as session:
             session.exec(...)
@@ -177,7 +175,7 @@ def get_instrumented_session() -> Generator[Session, None, None]:
     session = Session(engine)
     wait_duration = time.time() - wait_start
     db_pool_wait_seconds.observe(wait_duration)
-    
+
     try:
         yield session
         session.commit()

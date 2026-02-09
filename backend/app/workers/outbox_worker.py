@@ -21,7 +21,7 @@ from app.core.db import engine
 from app.core.kafka import kafka_producer
 from app.core.logging import configure_logging, get_logger
 from app.core.tracing import create_trace_context, TraceContext
-from app.core.metrics import (
+from app.core.metrics.metrics import (
     registry,
     outbox_events_pending,
     outbox_events_processed_total,
