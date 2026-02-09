@@ -27,6 +27,8 @@ from app.core.metrics import (
     outbox_events_processed_total,
     outbox_publish_duration_seconds,
     outbox_retry_attempts_total,
+    kafka_events_published_total,
+    kafka_publish_duration_seconds,
 )
 from app.models import OutboxEvent
 
@@ -151,6 +153,7 @@ async def publish_pending_events(batch_size: int) -> int:
                     headers.append(("traceparent", traceparent.encode("utf-8")))
 
                 # Publish to Kafka with trace headers
+                kafka_start_time = time.time()
                 await kafka_producer.producer.send_and_wait(
                     topic=event.topic,
                     value=event.payload,
@@ -159,6 +162,15 @@ async def publish_pending_events(batch_size: int) -> int:
                     else None,
                     headers=headers,  # NEW: Include trace context
                 )
+                kafka_duration = time.time() - kafka_start_time
+
+                # Track Kafka publish metrics
+                kafka_events_published_total.labels(
+                    topic=event.topic, event_type=event.event_type, status="success"
+                ).inc()
+                kafka_publish_duration_seconds.labels(
+                    topic=event.topic, event_type=event.event_type
+                ).observe(kafka_duration)
 
                 # Mark as published
                 event.published = True
@@ -185,6 +197,11 @@ async def publish_pending_events(batch_size: int) -> int:
 
             except Exception as e:
                 session.rollback()
+
+                # Track failed Kafka publish
+                kafka_events_published_total.labels(
+                    topic=event.topic, event_type=event.event_type, status="failure"
+                ).inc()
 
                 # Update failure tracking
                 event.attempts += 1

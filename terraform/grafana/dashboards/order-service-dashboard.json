@@ -393,7 +393,7 @@
       },
       "targets": [
         {
-          "expr": "sum(kafka_consumergroup_lag{consumergroup=\"order-service\"}) by (topic)",
+          "expr": "sum(kafka_consumer_lag_messages{service=\"order-service\"}) by (topic)",
           "legendFormat": "{{topic}}"
         }
       ],
