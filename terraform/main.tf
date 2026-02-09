@@ -752,6 +752,11 @@ resource "kubernetes_manifest" "kafka_cluster" {
           }
         }
       }
+
+      kafkaExporter = {
+        groupRegex = ".*"
+        topicRegex = ".*"
+      }
     }
   }
 
